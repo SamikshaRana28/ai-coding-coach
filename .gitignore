@@ -1,0 +1,17 @@
+# Environment variables - KABHI GITHUB PE MAT DAALO
+.env
+*.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# ML Models
+*.pkl
+*.joblib
+
+# Node
+node_modules/
+build/
