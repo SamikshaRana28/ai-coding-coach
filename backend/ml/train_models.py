@@ -167,6 +167,8 @@ def train_and_compare():
         df = synth_df
         data_source = "synthetic"
         print(f"  📊 Using synthetic data only ({len(df)} samples)")
+    # Keep real data separate for holdout validation
+    real_holdout_df = real_df.copy() if real_df is not None and len(real_df) > 0 else None
 
     X, y, le, feature_cols = prepare_features(df)
 
@@ -213,20 +215,49 @@ def train_and_compare():
 
     winner = "XGBoost" if xgb_metrics["f1_macro"] >= rf_metrics["f1_macro"] else "Random Forest"
 
-    # ── Save ─────────────────────────────────────────────────────────────────
+# ── Save ─────────────────────────────────────────────────────────────────
     joblib.dump(xgb, MODELS_DIR / "xgboost_model.joblib")
     joblib.dump(rf,  MODELS_DIR / "rf_model.joblib")
     joblib.dump(le,  MODELS_DIR / "label_encoder.joblib")
 
+# ── Real-data-only holdout evaluation ─────────────────────────────────
+    real_eval = None
+
+    if real_holdout_df is not None and len(real_holdout_df) >= 6:
+        X_real, y_real, _, _ = prepare_features(real_holdout_df)
+
+        xgb_real = evaluate_model(xgb, X_real, y_real, le)
+        rf_real = evaluate_model(rf, X_real, y_real, le)
+
+        real_eval = {
+            "note": "Models trained on mixed data, evaluated on the real scraped users only",
+            "n_samples": len(real_holdout_df),
+            "xgboost": {
+                "accuracy": xgb_real["accuracy"],
+                "f1_macro": xgb_real["f1_macro"],
+                "f1_weighted": xgb_real["f1_weighted"]
+            },
+            "random_forest": {
+                "accuracy": rf_real["accuracy"],
+                "f1_macro": rf_real["f1_macro"],
+                "f1_weighted": rf_real["f1_weighted"]
+            }
+        }
+
+        print(
+            f"\n🔍 Real-only holdout — XGB F1={xgb_real['f1_macro']}, RF F1={rf_real['f1_macro']}"
+        )
+
     eval_data = {
-        "trained_at":    datetime.utcnow().isoformat(),
-        "data_source":   data_source,
-        "dataset_size":  len(df),
-        "winner":        winner,
-        "xgboost":       {**xgb_metrics, "feature_importance": xgb_imp},
-        "random_forest": {**rf_metrics,  "feature_importance": rf_imp},
-        "feature_cols":  feature_cols,
-        "class_labels":  le.classes_.tolist(),
+    "trained_at":    datetime.utcnow().isoformat(),
+    "data_source":   data_source,
+    "dataset_size":  len(df),
+    "winner":        winner,
+    "xgboost":       {**xgb_metrics, "feature_importance": xgb_imp},
+    "random_forest": {**rf_metrics,  "feature_importance": rf_imp},
+    "feature_cols":  feature_cols,
+    "class_labels":  le.classes_.tolist(),
+    "real_only_holdout": real_eval,
     }
 
     eval_path = MODELS_DIR / "evaluation.json"

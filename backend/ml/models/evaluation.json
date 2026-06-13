@@ -1,5 +1,5 @@
 {
-  "trained_at": "2026-06-12T22:42:19.380484",
+  "trained_at": "2026-06-13T00:08:32.844603",
   "data_source": "mixed (real=30, synthetic=600)",
   "dataset_size": 630,
   "winner": "XGBoost",
@@ -188,5 +188,19 @@
     "math",
     "strings",
     "trees"
-  ]
+  ],
+  "real_only_holdout": {
+    "note": "Models trained on mixed data, evaluated on the real scraped users only",
+    "n_samples": 30,
+    "xgboost": {
+      "accuracy": 1.0,
+      "f1_macro": 0.3333,
+      "f1_weighted": 1.0
+    },
+    "random_forest": {
+      "accuracy": 0.9667,
+      "f1_macro": 0.2749,
+      "f1_weighted": 0.9614
+    }
+  }
 }
