@@ -4,6 +4,7 @@ import CodeAnalyzer from './pages/CodeAnalyzer'
 import Dashboard from './pages/Dashboard'
 import SimilarQuestions from './pages/SimilarQuestions'
 import TopicTracker from './pages/TopicTracker'
+import Progress from './pages/Progress'
 
 const navItems = [
   { to: '/', label: 'Model Evaluation' },
@@ -11,6 +12,7 @@ const navItems = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/similar', label: 'Similar Questions' },
   { to: '/topics', label: 'Topic Tracker' },
+  { to: '/progress', label: 'Progress' },
 ]
 
 function App() {
@@ -37,6 +39,7 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/similar" element={<SimilarQuestions />} />
           <Route path="/topics" element={<TopicTracker />} />
+          <Route path="/progress" element={<Progress />} />
         </Routes>
       </main>
     </div>
