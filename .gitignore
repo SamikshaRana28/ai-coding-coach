@@ -9,8 +9,6 @@ __pycache__/
 venv/
 
 # ML Models
-*.pkl
-*.joblib
 
 # Node
 node_modules/

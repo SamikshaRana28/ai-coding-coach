@@ -3,8 +3,8 @@ import os
 import numpy as np
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
-ENCODER_PATH = os.path.join(BASE_DIR, "label_encoder.pkl")
+MODEL_PATH = os.path.join(BASE_DIR, "models", "xgboost_model.joblib")
+ENCODER_PATH = os.path.join(BASE_DIR, "models", "label_encoder.joblib")
 
 # Model ek baar load karo (server start pe)
 model = joblib.load(MODEL_PATH)
