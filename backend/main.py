@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from groq import Groq
 from sqlalchemy.orm import Session
-from models import get_db, Attempt, create_tables
+from models import get_db, Attempt, TopicProgress, create_tables
 from ml.predict import predict_weak_topic
 from ml.recommender import get_similar_questions
 from ml.score import calculate_readiness_score
@@ -84,19 +84,29 @@ def analyze_code(request: AnalyzeRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=503, detail="GROQ_API_KEY .env mein set karo")
 
     prompt = f"""
-You are an expert coding interview coach. Analyze the following code.
+You are a strict, expert coding interview coach reviewing a candidate's submission. Be critical and precise — do not assume the code is correct.
 
 Problem: {request.question}
+Code ({request.language}):
+{request.code}
+
+IMPORTANT: First check if the code actually attempts to solve the stated problem. If the code is unrelated to the problem (e.g. solves a completely different algorithm), set BUGS to "MISMATCH: Code does not address the stated problem - it implements [what it actually does] instead", and set TIME_COMPLEXITY/SPACE_COMPLEXITY to the complexity of what the code DOES do (not "N/A").
+
+If the code DOES attempt the stated problem, then check for syntax errors first (invalid statements, wrong punctuation, mismatched brackets) — report these in BUGS. Then check logic errors and edge cases.
 
 Code ({request.language}):
 {request.code}
 
+First, check carefully for syntax errors (e.g. invalid statements, wrong punctuation like a semicolon in Python, mismatched brackets, indentation errors) — these would prevent the code from running at all. If there is a syntax error, that IS a bug and must be reported first.
+
+Then check for logic errors, edge cases (empty input, no solution found, duplicates), and correctness vs the problem statement.
+
 Reply in EXACTLY this format, one per line:
 
-TIME_COMPLEXITY: [answer]
-SPACE_COMPLEXITY: [answer]
-BUGS: [bugs or "No bugs found"]
-BETTER_APPROACH: [better approach or "This is optimal"]
+TIME_COMPLEXITY: [answer, or "N/A - syntax error" if code doesn't run]
+SPACE_COMPLEXITY: [answer, or "N/A - syntax error" if code doesn't run]
+BUGS: [list ALL bugs found, including syntax errors, with line references. If truly no bugs exist, write "No bugs found"]
+BETTER_APPROACH: [better approach, or "This is optimal" only if code is correct and already optimal]
 SIMILAR_QUESTIONS: [3 similar questions]
 INTERVIEWER_QUESTIONS: [3 interview questions]
 """
@@ -134,6 +144,24 @@ INTERVIEWER_QUESTIONS: [3 interview questions]
             bugs_found=0 if result.bugs == "No bugs found" else 1,
         )
         db.add(attempt)
+        # Auto-update topic progress
+        tp = db.query(TopicProgress).filter(
+            TopicProgress.user_id == request.user_id,
+            TopicProgress.topic == request.topic
+        ).first()
+
+        if tp:
+            tp.total_attempts += 1
+            if result.bugs == "No bugs found":
+                tp.count += 1
+        else:
+            tp = TopicProgress(
+                user_id=request.user_id,
+                topic=request.topic,
+                count=1 if result.bugs == "No bugs found" else 0,
+                total_attempts=1
+            )
+            db.add(tp)
         db.commit()
         return result
 
@@ -153,6 +181,27 @@ def get_attempts(user_id: int, db: Session = Depends(get_db)):
             "created_at": str(a.created_at)
         } for a in attempts
     ]}
+
+
+
+@app.get("/topic-stats/{user_id}")
+def get_topic_stats(user_id: int, db: Session = Depends(get_db)):
+    """
+    Returns solved-count per topic for this user (dynamic — any topic name).
+    Used by Topic Tracker page.
+    """
+    rows = db.query(TopicProgress).filter(TopicProgress.user_id == user_id).all()
+    total_attempts = sum(r.total_attempts for r in rows)
+    acceptance_rate = (
+        sum(r.count for r in rows) / total_attempts if total_attempts > 0 else 0
+    )
+    return {
+        "user_id": user_id,
+        "topics": {r.topic: r.count for r in rows},
+        "acceptance_rate": round(acceptance_rate, 3),
+        "total_attempts": total_attempts
+    }
+
 
 
 @app.post("/predict")

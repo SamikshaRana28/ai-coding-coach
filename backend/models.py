@@ -35,6 +35,17 @@ class Attempt(Base):
     bugs_found = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+
+# TopicProgress table - per-user, per-topic solved counts (dynamic, any topic name)
+class TopicProgress(Base):
+    __tablename__ = "topic_progress"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer)
+    topic = Column(String)        # any topic name - arrays, dp, "linked lists", etc.
+    count = Column(Integer, default=0)
+    total_attempts = Column(Integer, default=0)  # for acceptance_rate calc
+
+    
 # Tables banao database mein
 def create_tables():
     Base.metadata.create_all(engine)

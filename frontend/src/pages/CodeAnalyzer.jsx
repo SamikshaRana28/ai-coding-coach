@@ -6,6 +6,7 @@ export default function CodeAnalyzer() {
   const [question, setQuestion] = useState('Two Sum')
   const [code, setCode] = useState('def two_sum(nums, target):\n    for i in range(len(nums)):\n        for j in range(i+1, len(nums)):\n            if nums[i] + nums[j] == target:\n                return [i, j]')
   const [language, setLanguage] = useState('python')
+  const [topic, setTopic] = useState('general')
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -15,7 +16,7 @@ export default function CodeAnalyzer() {
     setError(null)
     setResult(null)
     try {
-      const res = await analyzeCode({ question, code, language, topic: 'general', difficulty: 'medium', user_id: 1 })
+      const res = await analyzeCode({ question, code, language, topic, difficulty: 'medium', user_id: 1 })
       setResult(res.data)
     } catch (e) {
       setError(e.response?.data?.detail || e.message)
@@ -55,6 +56,21 @@ export default function CodeAnalyzer() {
               <option value="java">Java</option>
               <option value="cpp">C++</option>
             </select>
+
+
+
+            <div>
+            <label className="text-sm font-medium block mb-1">Topic</label>
+            <input
+              className="w-full border border-slate-300 rounded-lg px-3 py-2"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              placeholder="e.g. arrays, dp, graphs, linked lists"
+            />
+          </div>
+
+
+          
           </div>
 
           <div>

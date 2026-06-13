@@ -78,6 +78,15 @@ export default function ModelEvaluation() {
   return (
     <div className="space-y-8">
       <div>
+
+
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm text-slate-600 space-y-1">
+  <p><strong>What is this page?</strong> This compares two ML models (XGBoost vs Random Forest) trained to predict a user's "weak topic" (e.g. DP, Graphs) based on their solving history.</p>
+  <p><strong>Accuracy / F1 / ROC-AUC</strong> — standard classification metrics. Higher = better. F1 balances precision and recall; ROC-AUC measures how well the model separates classes.</p>
+  <p><strong>CV F1 mean/std</strong> — cross-validation results (model tested on 5 different data splits) to check consistency, not just one lucky split.</p>
+</div>
+
+
         <h1 className="text-3xl font-bold">📊 Model Evaluation</h1>
         <p className="text-slate-500 mt-1">
           XGBoost vs Random Forest — Weak Topic Predictor ({data.dataset_size} samples, {data.data_source})
@@ -108,10 +117,24 @@ export default function ModelEvaluation() {
         </ResponsiveContainer>
       </div>
 
+
+          <p className="text-sm text-slate-500">
+  <strong>Confusion Matrix:</strong> rows = actual topic, columns = predicted topic. Diagonal (green) = correct predictions. Off-diagonal (red) = mistakes — e.g. model predicted "Graphs" but actual was "DP".
+</p>
+
+
       <div className="bg-white rounded-xl p-6 border border-slate-200 grid md:grid-cols-2 gap-8">
         <ConfusionMatrix matrix={data.xgboost.confusion_matrix} labels={data.class_labels} title="XGBoost Confusion Matrix" />
         <ConfusionMatrix matrix={data.random_forest.confusion_matrix} labels={data.class_labels} title="Random Forest Confusion Matrix" />
       </div>
+
+
+
+<p className="text-sm text-slate-500 mb-2">
+  <strong>Feature Importance:</strong> which input features (e.g. arrays_solved, dp_solved) the winning model relied on most when making predictions.
+</p>
+
+
 
       <div className="bg-white rounded-xl p-6 border border-slate-200">
         <h2 className="font-bold text-xl mb-4">Feature Importance ({data.winner})</h2>
