@@ -13,9 +13,9 @@
 
 # print("Loading dataset...")
 # df = pd.read_csv(DATA_PATH)
-# df = df[["title", "description", "difficulty"]].dropna()
+# df = df[["title", "description", "difficulty", "related_topics"]].dropna()
 
-# X = df["title"] + " " + df["description"].str[:300]
+# X = df["title"] + " " + df["description"].str[:300] + " " + df["related_topics"].fillna("")
 # y = df["difficulty"]
 
 # X_train, X_test, y_train, y_test = train_test_split(
@@ -26,7 +26,7 @@
 # X_train_vec = vectorizer.fit_transform(X_train)
 # X_test_vec = vectorizer.transform(X_test)
 
-# clf = LogisticRegression(max_iter=1000)
+# clf = LogisticRegression(max_iter=1000, class_weight="balanced")
 # clf.fit(X_train_vec, y_train)
 
 # preds = clf.predict(X_test_vec)
@@ -63,7 +63,7 @@ os.makedirs(MODELS_DIR, exist_ok=True)
 
 print("Loading dataset...")
 df = pd.read_csv(DATA_PATH)
-df = df[["title", "description", "difficulty"]].dropna()
+df = df[["title", "description", "difficulty", "related_topics"]].dropna()
 
 X = (
     df["title"]
