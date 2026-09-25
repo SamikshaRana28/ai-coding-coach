@@ -1,8 +1,6 @@
 import axios from 'axios'
 
-const API_BASE =
-  // 'https://redesigned-fortnight-g4p59r69rrj5297x9-8000.app.github.dev'
-  'https://super-duper-tribble-5g946r56rp9qh4rv7-8000.app.github.dev/'
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 export const api = axios.create({ baseURL: API_BASE })
 
