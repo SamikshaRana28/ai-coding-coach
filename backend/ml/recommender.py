@@ -62,7 +62,7 @@
 
 import pandas as pd
 import numpy as np
-from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding
 from sklearn.metrics.pairwise import cosine_similarity
 import os
 
@@ -72,13 +72,13 @@ print("Loading precomputed embeddings...")
 embeddings = np.load(os.path.join(BASE_DIR, "embeddings.npz"))["embeddings"]
 df = pd.read_pickle(os.path.join(BASE_DIR, "questions_df.pkl"))
 
-print("Loading sentence transformer model...")
-model = SentenceTransformer("all-MiniLM-L6-v2")
+print("Loading embedding model...")
+model = TextEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
 print(f"Ready! {len(df)} questions loaded.")
 
 def get_similar_questions(question_title: str, top_n: int = 3) -> list:
-    query_embedding = model.encode([question_title])
+    query_embedding = np.array(list(model.embed([question_title])))
     similarities = cosine_similarity(query_embedding, embeddings)[0]
     top_indices = similarities.argsort()[::-1]
 
