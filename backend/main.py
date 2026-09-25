@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from models import get_db, Attempt, TopicProgress, create_tables
 from ml.predict import predict_weak_topic
 from ml.recommender import get_similar_questions
+from ml.rag_context import build_similar_questions_context
 from ml.score import calculate_readiness_score
 from ml.progress import get_or_generate_progress
 import os
@@ -83,12 +84,17 @@ def analyze_code(request: AnalyzeRequest, db: Session = Depends(get_db)):
     if not client:
         raise HTTPException(status_code=503, detail="GROQ_API_KEY .env mein set karo")
 
+    retrieved_context = build_similar_questions_context(request.question)
+
     prompt = f"""
 You are a strict, expert coding interview coach reviewing a candidate's submission. Be critical and precise — do not assume the code is correct.
 
 Problem: {request.question}
 Code ({request.language}):
 {request.code}
+
+Here are real similar questions retrieved from our question database — use these, don't invent your own:
+{retrieved_context}
 
 IMPORTANT: First check if the code actually attempts to solve the stated problem. If the code is unrelated to the problem (e.g. solves a completely different algorithm), set BUGS to "MISMATCH: Code does not address the stated problem - it implements [what it actually does] instead", and set TIME_COMPLEXITY/SPACE_COMPLEXITY to the complexity of what the code DOES do (not "N/A").
 
@@ -107,7 +113,7 @@ TIME_COMPLEXITY: [answer, or "N/A - syntax error" if code doesn't run]
 SPACE_COMPLEXITY: [answer, or "N/A - syntax error" if code doesn't run]
 BUGS: [list ALL bugs found, including syntax errors, with line references. If truly no bugs exist, write "No bugs found"]
 BETTER_APPROACH: [better approach, or "This is optimal" only if code is correct and already optimal]
-SIMILAR_QUESTIONS: [3 similar questions]
+SIMILAR_QUESTIONS: [pick from the retrieved list above, explain briefly why each is similar]
 INTERVIEWER_QUESTIONS: [3 interview questions]
 """
     try:
