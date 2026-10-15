@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react'
 import { getProgress } from '../api'
+import { useAuth } from '../auth/useAuth'
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts'
 
 export default function Progress() {
+  const { user } = useAuth()
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    getProgress(1)
+    getProgress(user.id)
       .then(res => setData(res.data))
       .catch(e => setError(e.message))
-  }, [])
+  }, [user.id])
 
   if (error) return <div className="text-red-600">Error loading progress: {error}</div>
   if (!data) return <div>Loading progress...</div>

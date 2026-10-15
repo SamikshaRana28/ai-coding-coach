@@ -16,7 +16,7 @@ export default function CodeAnalyzer() {
     setError(null)
     setResult(null)
     try {
-      const res = await analyzeCode({ question, code, language, topic, difficulty: 'medium', user_id: 1 })
+      const res = await analyzeCode({ question, code, language, topic, difficulty: 'medium' })
       setResult(res.data)
     } catch (e) {
       setError(e.response?.data?.detail || e.message)

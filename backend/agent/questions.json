@@ -1,0 +1,678 @@
+[
+  {
+    "id": "two_sum",
+    "title": "Two Sum",
+    "topic": "arrays",
+    "level": "easy",
+    "statement": "Given a list of integers `nums` and an integer `target`, return the indices of the two numbers that add up to `target`. Exactly one solution exists and you may not use the same element twice. Implement `two_sum(nums, target)`.",
+    "function": "two_sum",
+    "compare": "sorted",
+    "tests": [
+      {
+        "args": [
+          [
+            2,
+            7,
+            11,
+            15
+          ],
+          9
+        ],
+        "expected": [
+          0,
+          1
+        ]
+      },
+      {
+        "args": [
+          [
+            3,
+            2,
+            4
+          ],
+          6
+        ],
+        "expected": [
+          1,
+          2
+        ]
+      },
+      {
+        "args": [
+          [
+            3,
+            3
+          ],
+          6
+        ],
+        "expected": [
+          0,
+          1
+        ]
+      },
+      {
+        "args": [
+          [
+            1,
+            5,
+            9,
+            14
+          ],
+          23
+        ],
+        "expected": [
+          2,
+          3
+        ]
+      }
+    ],
+    "hints": [
+      "Think about what you need to find for each number x, if the target is fixed.",
+      "A brute force is O(n^2). What data structure lets you check 'have I seen target - x' in O(1)?",
+      "Use a hash map from value to index while scanning left to right."
+    ],
+    "follow_ups": [
+      "What is the time and space complexity of your approach?",
+      "What if the array is already sorted? Can you use O(1) extra space?"
+    ]
+  },
+  {
+    "id": "valid_parentheses",
+    "title": "Valid Parentheses",
+    "topic": "stack",
+    "level": "easy",
+    "statement": "Given a string `s` of brackets ()[]{}, return True if it is valid: every opener is closed by the same type, in the correct order. Implement `is_valid(s)`.",
+    "function": "is_valid",
+    "compare": "exact",
+    "tests": [
+      {
+        "args": [
+          "()"
+        ],
+        "expected": true
+      },
+      {
+        "args": [
+          "()[]{}"
+        ],
+        "expected": true
+      },
+      {
+        "args": [
+          "(]"
+        ],
+        "expected": false
+      },
+      {
+        "args": [
+          "([)]"
+        ],
+        "expected": false
+      },
+      {
+        "args": [
+          "{[]}"
+        ],
+        "expected": true
+      },
+      {
+        "args": [
+          ""
+        ],
+        "expected": true
+      },
+      {
+        "args": [
+          "(("
+        ],
+        "expected": false
+      }
+    ],
+    "hints": [
+      "The most recent unclosed opener must be closed first.",
+      "Which data structure gives last-in-first-out?",
+      "Push openers; on a closer, pop and compare. At the end the stack must be empty."
+    ],
+    "follow_ups": [
+      "What happens for an empty string or a string with only closers?",
+      "How would you extend it to also return the index of the first invalid bracket?"
+    ]
+  },
+  {
+    "id": "best_time_to_buy_sell",
+    "title": "Best Time to Buy and Sell Stock",
+    "topic": "arrays",
+    "level": "easy",
+    "statement": "`prices[i]` is a stock price on day i. Buy once and sell once later to maximise profit. Return the max profit, or 0 if no profit is possible. Implement `max_profit(prices)`.",
+    "function": "max_profit",
+    "compare": "exact",
+    "tests": [
+      {
+        "args": [
+          [
+            7,
+            1,
+            5,
+            3,
+            6,
+            4
+          ]
+        ],
+        "expected": 5
+      },
+      {
+        "args": [
+          [
+            7,
+            6,
+            4,
+            3,
+            1
+          ]
+        ],
+        "expected": 0
+      },
+      {
+        "args": [
+          [
+            1
+          ]
+        ],
+        "expected": 0
+      },
+      {
+        "args": [
+          [
+            2,
+            4,
+            1
+          ]
+        ],
+        "expected": 2
+      },
+      {
+        "args": [
+          []
+        ],
+        "expected": 0
+      }
+    ],
+    "hints": [
+      "For each day, what is the best day to have bought before it?",
+      "Track the minimum price seen so far.",
+      "Profit on day i = prices[i] - min_so_far; keep the maximum."
+    ],
+    "follow_ups": [
+      "What if you can make unlimited transactions?",
+      "What does your code return for an empty list?"
+    ]
+  },
+  {
+    "id": "longest_unique_substring",
+    "title": "Longest Substring Without Repeating Characters",
+    "topic": "sliding window",
+    "level": "medium",
+    "statement": "Given a string `s`, return the length of the longest substring without repeating characters. Implement `length_of_longest_substring(s)`.",
+    "function": "length_of_longest_substring",
+    "compare": "exact",
+    "tests": [
+      {
+        "args": [
+          "abcabcbb"
+        ],
+        "expected": 3
+      },
+      {
+        "args": [
+          "bbbbb"
+        ],
+        "expected": 1
+      },
+      {
+        "args": [
+          "pwwkew"
+        ],
+        "expected": 3
+      },
+      {
+        "args": [
+          ""
+        ],
+        "expected": 0
+      },
+      {
+        "args": [
+          "abba"
+        ],
+        "expected": 2
+      },
+      {
+        "args": [
+          "dvdf"
+        ],
+        "expected": 3
+      }
+    ],
+    "hints": [
+      "Brute force checks all substrings. Can you reuse work between neighbouring substrings?",
+      "Maintain a window [start, i] that always has unique characters.",
+      "When you see a repeated char inside the window, move `start` just past its previous index."
+    ],
+    "follow_ups": [
+      "Why is this O(n) even though there is a window shrink step?",
+      "What changes if the alphabet is only lowercase letters?"
+    ]
+  },
+  {
+    "id": "max_subarray",
+    "title": "Maximum Subarray",
+    "topic": "dp",
+    "level": "medium",
+    "statement": "Given a non-empty list of integers `nums`, return the largest sum of any contiguous subarray. Implement `max_subarray(nums)`.",
+    "function": "max_subarray",
+    "compare": "exact",
+    "tests": [
+      {
+        "args": [
+          [
+            -2,
+            1,
+            -3,
+            4,
+            -1,
+            2,
+            1,
+            -5,
+            4
+          ]
+        ],
+        "expected": 6
+      },
+      {
+        "args": [
+          [
+            1
+          ]
+        ],
+        "expected": 1
+      },
+      {
+        "args": [
+          [
+            5,
+            4,
+            -1,
+            7,
+            8
+          ]
+        ],
+        "expected": 23
+      },
+      {
+        "args": [
+          [
+            -3,
+            -2,
+            -5
+          ]
+        ],
+        "expected": -2
+      }
+    ],
+    "hints": [
+      "At each index, you either extend the previous subarray or start fresh.",
+      "Define best_ending_here[i] in terms of best_ending_here[i-1].",
+      "cur = max(x, cur + x); answer = max over all cur. Careful with all-negative input."
+    ],
+    "follow_ups": [
+      "Can you reduce space to O(1)?",
+      "How would you also return the start and end indices?"
+    ]
+  },
+  {
+    "id": "binary_search",
+    "title": "Binary Search",
+    "topic": "binary search",
+    "level": "easy",
+    "statement": "Given a sorted list `nums` and an integer `target`, return the index of `target`, or -1 if absent. Implement `search(nums, target)` in O(log n).",
+    "function": "search",
+    "compare": "exact",
+    "tests": [
+      {
+        "args": [
+          [
+            -1,
+            0,
+            3,
+            5,
+            9,
+            12
+          ],
+          9
+        ],
+        "expected": 4
+      },
+      {
+        "args": [
+          [
+            -1,
+            0,
+            3,
+            5,
+            9,
+            12
+          ],
+          2
+        ],
+        "expected": -1
+      },
+      {
+        "args": [
+          [
+            5
+          ],
+          5
+        ],
+        "expected": 0
+      },
+      {
+        "args": [
+          [],
+          1
+        ],
+        "expected": -1
+      },
+      {
+        "args": [
+          [
+            1,
+            2,
+            3,
+            4
+          ],
+          4
+        ],
+        "expected": 3
+      }
+    ],
+    "hints": [
+      "Each comparison should discard half of the remaining range.",
+      "Keep two pointers lo and hi, and look at the middle element.",
+      "Watch the loop condition (lo <= hi) and the mid +/- 1 updates to avoid infinite loops."
+    ],
+    "follow_ups": [
+      "Why can (lo + hi) // 2 overflow in some languages, and how do you avoid it?",
+      "How would you find the first occurrence if duplicates exist?"
+    ]
+  },
+  {
+    "id": "climbing_stairs",
+    "title": "Climbing Stairs",
+    "topic": "dp",
+    "level": "easy",
+    "statement": "You climb a staircase of `n` steps, taking 1 or 2 steps at a time. Return the number of distinct ways to reach the top. Implement `climb_stairs(n)`.",
+    "function": "climb_stairs",
+    "compare": "exact",
+    "tests": [
+      {
+        "args": [
+          1
+        ],
+        "expected": 1
+      },
+      {
+        "args": [
+          2
+        ],
+        "expected": 2
+      },
+      {
+        "args": [
+          3
+        ],
+        "expected": 3
+      },
+      {
+        "args": [
+          5
+        ],
+        "expected": 8
+      },
+      {
+        "args": [
+          10
+        ],
+        "expected": 89
+      },
+      {
+        "args": [
+          30
+        ],
+        "expected": 1346269
+      }
+    ],
+    "hints": [
+      "Think about the last move you made to reach step n.",
+      "ways(n) = ways(n-1) + ways(n-2).",
+      "You only need the previous two values, so O(1) space is possible."
+    ],
+    "follow_ups": [
+      "What is the complexity of the plain recursive version, and how does memoization fix it?",
+      "How would the recurrence change if you could also take 3 steps?"
+    ]
+  },
+  {
+    "id": "coin_change",
+    "title": "Coin Change",
+    "topic": "dp",
+    "level": "medium",
+    "statement": "Given coin denominations `coins` and a target `amount`, return the fewest coins needed to make the amount, or -1 if impossible. Implement `coin_change(coins, amount)`.",
+    "function": "coin_change",
+    "compare": "exact",
+    "tests": [
+      {
+        "args": [
+          [
+            1,
+            2,
+            5
+          ],
+          11
+        ],
+        "expected": 3
+      },
+      {
+        "args": [
+          [
+            2
+          ],
+          3
+        ],
+        "expected": -1
+      },
+      {
+        "args": [
+          [
+            1
+          ],
+          0
+        ],
+        "expected": 0
+      },
+      {
+        "args": [
+          [
+            186,
+            419,
+            83,
+            408
+          ],
+          6249
+        ],
+        "expected": 20
+      },
+      {
+        "args": [
+          [
+            3,
+            7
+          ],
+          5
+        ],
+        "expected": -1
+      }
+    ],
+    "hints": [
+      "Greedy (always pick the largest coin) fails for some inputs. Can you find one?",
+      "Let dp[a] = fewest coins for amount a.",
+      "dp[a] = min(dp[a - c] + 1) over coins c <= a. Initialise unreachable states with infinity."
+    ],
+    "follow_ups": [
+      "What is the time and space complexity in terms of amount and number of coins?",
+      "How would you count the number of combinations instead of the minimum coins?"
+    ]
+  },
+  {
+    "id": "contains_duplicate",
+    "title": "Contains Duplicate",
+    "topic": "hashing",
+    "level": "easy",
+    "statement": "Given a list of integers `nums`, return True if any value appears at least twice, else False. Implement `contains_duplicate(nums)`.",
+    "function": "contains_duplicate",
+    "compare": "exact",
+    "tests": [
+      {
+        "args": [
+          [
+            1,
+            2,
+            3,
+            1
+          ]
+        ],
+        "expected": true
+      },
+      {
+        "args": [
+          [
+            1,
+            2,
+            3,
+            4
+          ]
+        ],
+        "expected": false
+      },
+      {
+        "args": [
+          []
+        ],
+        "expected": false
+      },
+      {
+        "args": [
+          [
+            1,
+            1,
+            1,
+            3,
+            3,
+            4,
+            3,
+            2,
+            4,
+            2
+          ]
+        ],
+        "expected": true
+      }
+    ],
+    "hints": [
+      "Sorting would make duplicates adjacent. What is the cost of that?",
+      "A set remembers what you have already seen.",
+      "Compare the length of the set with the length of the list, or exit early on the first repeat."
+    ],
+    "follow_ups": [
+      "What is the trade-off between the sort approach and the hash set approach?",
+      "How would you handle a stream that does not fit in memory?"
+    ]
+  },
+  {
+    "id": "product_except_self",
+    "title": "Product of Array Except Self",
+    "topic": "arrays",
+    "level": "medium",
+    "statement": "Given a list `nums`, return a list `out` where out[i] is the product of all elements except nums[i], without using division, in O(n). Implement `product_except_self(nums)`.",
+    "function": "product_except_self",
+    "compare": "exact",
+    "tests": [
+      {
+        "args": [
+          [
+            1,
+            2,
+            3,
+            4
+          ]
+        ],
+        "expected": [
+          24,
+          12,
+          8,
+          6
+        ]
+      },
+      {
+        "args": [
+          [
+            -1,
+            1,
+            0,
+            -3,
+            3
+          ]
+        ],
+        "expected": [
+          0,
+          0,
+          9,
+          0,
+          0
+        ]
+      },
+      {
+        "args": [
+          [
+            2,
+            3
+          ]
+        ],
+        "expected": [
+          3,
+          2
+        ]
+      },
+      {
+        "args": [
+          [
+            0,
+            0
+          ]
+        ],
+        "expected": [
+          0,
+          0
+        ]
+      }
+    ],
+    "hints": [
+      "out[i] = (product of everything to the left) * (product of everything to the right).",
+      "Can you build the left products in one pass?",
+      "Do a second pass from the right, multiplying by a running right product, to keep O(1) extra space."
+    ],
+    "follow_ups": [
+      "Why is division a problem when the array contains zeros?",
+      "What is the extra space if the output array is not counted?"
+    ]
+  }
+]

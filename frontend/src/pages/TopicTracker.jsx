@@ -62,10 +62,13 @@
 import { useState, useEffect } from 'react'
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Legend } from 'recharts'
 import { api } from '../api'
+import { useAuth } from '../auth/useAuth'
 
 const defaultTopics = ['arrays', 'graphs', 'dp', 'trees', 'strings', 'math']
 
-export default function TopicTracker({ userId = 1 }) {
+export default function TopicTracker({ userId: userIdProp }) {
+  const { user } = useAuth()
+  const userId = userIdProp ?? user.id
   const [stats, setStats] = useState({})
   const [newTopic, setNewTopic] = useState('')
   const [loading, setLoading] = useState(true)
