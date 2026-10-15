@@ -1,15 +1,24 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from typing import Optional
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from dotenv import load_dotenv
 from groq import Groq
 from sqlalchemy.orm import Session
-from models import get_db, Attempt, TopicProgress, create_tables
+from models import get_db, Attempt, TopicProgress, User, create_tables
+from auth import router as auth_router, limiter, get_current_user, require_path_user
 from ml.predict import predict_weak_topic
 from ml.recommender import get_similar_questions
 from ml.rag_context import build_similar_questions_context
 from ml.score import calculate_readiness_score
 from ml.progress import get_or_generate_progress
+from interview_router import router as interview_router
+from agent.tools import get_weak_patterns_text
 import os
 import json
 from pathlib import Path
@@ -20,12 +29,35 @@ load_dotenv()
 app = FastAPI(title="AI Coding Coach")
 create_tables()
 
+app.include_router(interview_router)
+# CORS_ORIGINS="https://your-app.vercel.app,http://localhost:5173" restricts origins.
+# Unset => "*" (unchanged behaviour). Auth uses Bearer headers, not cookies.
+_cors_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()] or ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Auth wiring ────────────────────────────────────────────────────────────
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.include_router(auth_router)
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_error_handler(request: Request, exc: RequestValidationError):
+    # Pydantic echoes the offending input in 422 bodies. For /auth/* that input
+    # can be a password, so strip it. All other routes keep the default response.
+    if request.url.path.startswith("/auth"):
+        errors = [
+            {"type": e.get("type"), "loc": list(e.get("loc", [])), "msg": e.get("msg")}
+            for e in exc.errors()
+        ]
+        return JSONResponse(status_code=422, content={"detail": errors})
+    return await request_validation_exception_handler(request, exc)
 
 # ✅ FIX: Groq crash nahi karega agar key missing ho
 groq_api_key = os.getenv("GROQ_API_KEY")
@@ -47,7 +79,7 @@ class AnalyzeRequest(BaseModel):
     language: str = "python"
     topic: str = "general"
     difficulty: str = "medium"
-    user_id: int = 1
+    user_id: Optional[int] = None  # deprecated + ignored: identity comes from the auth token
 
 class AnalyzeResponse(BaseModel):
     time_complexity: str
@@ -80,11 +112,17 @@ def root():
 
 
 @app.post("/analyze", response_model=AnalyzeResponse)
-def analyze_code(request: AnalyzeRequest, db: Session = Depends(get_db)):
+def analyze_code(
+    request: AnalyzeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    uid = current_user.id  # verified identity from the token (body user_id is ignored)
     if not client:
         raise HTTPException(status_code=503, detail="GROQ_API_KEY .env mein set karo")
 
     retrieved_context = build_similar_questions_context(request.question)
+    weak_context = get_weak_patterns_text(db, uid)
 
     prompt = f"""
 You are a strict, expert coding interview coach reviewing a candidate's submission. Be critical and precise — do not assume the code is correct.
@@ -95,6 +133,9 @@ Code ({request.language}):
 
 Here are real similar questions retrieved from our question database — use these, don't invent your own:
 {retrieved_context}
+
+Known weak patterns of this candidate (from past mock interviews): {weak_context}
+If relevant to this problem, tailor your feedback and hints to these weaknesses.
 
 IMPORTANT: First check if the code actually attempts to solve the stated problem. If the code is unrelated to the problem (e.g. solves a completely different algorithm), set BUGS to "MISMATCH: Code does not address the stated problem - it implements [what it actually does] instead", and set TIME_COMPLEXITY/SPACE_COMPLEXITY to the complexity of what the code DOES do (not "N/A").
 
@@ -140,7 +181,7 @@ INTERVIEWER_QUESTIONS: [3 interview questions]
         )
 
         attempt = Attempt(
-            user_id=request.user_id,
+            user_id=uid,
             question=request.question,
             code=request.code,
             topic=request.topic,
@@ -152,7 +193,7 @@ INTERVIEWER_QUESTIONS: [3 interview questions]
         db.add(attempt)
         # Auto-update topic progress
         tp = db.query(TopicProgress).filter(
-            TopicProgress.user_id == request.user_id,
+            TopicProgress.user_id == uid,
             TopicProgress.topic == request.topic
         ).first()
 
@@ -162,7 +203,7 @@ INTERVIEWER_QUESTIONS: [3 interview questions]
                 tp.count += 1
         else:
             tp = TopicProgress(
-                user_id=request.user_id,
+                user_id=uid,
                 topic=request.topic,
                 count=1 if result.bugs == "No bugs found" else 0,
                 total_attempts=1
@@ -176,7 +217,7 @@ INTERVIEWER_QUESTIONS: [3 interview questions]
 
 
 @app.get("/attempts/{user_id}")
-def get_attempts(user_id: int, db: Session = Depends(get_db)):
+def get_attempts(user_id: int, db: Session = Depends(get_db), _user: User = Depends(require_path_user)):
     attempts = db.query(Attempt).filter(Attempt.user_id == user_id).all()
     return {"total": len(attempts), "attempts": [
         {
@@ -191,7 +232,7 @@ def get_attempts(user_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/topic-stats/{user_id}")
-def get_topic_stats(user_id: int, db: Session = Depends(get_db)):
+def get_topic_stats(user_id: int, db: Session = Depends(get_db), _user: User = Depends(require_path_user)):
     """
     Returns solved-count per topic for this user (dynamic — any topic name).
     Used by Topic Tracker page.
@@ -333,7 +374,7 @@ def get_model_evaluation():
 
 
 @app.get("/progress/{user_id}")
-def get_progress(user_id: int, db: Session = Depends(get_db)):
+def get_progress(user_id: int, db: Session = Depends(get_db), _user: User = Depends(require_path_user)):
     """
     Weekly readiness score progression.
     Real attempts se calculate karta hai, warna demo data dikhata hai.
