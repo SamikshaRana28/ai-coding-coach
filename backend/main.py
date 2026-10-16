@@ -1,9 +1,12 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from user_stats import topic_stats, get_topic_stats
 from dotenv import load_dotenv
+from ml.difficulty_predict import predict_difficulty, ModelNotTrained
 from sqlalchemy.orm import Session
 from models import get_db, Attempt, TopicProgress, create_tables
+from coach_router import router as coach_router
 from analysis import AnalyzeResponse, run_analysis, record_attempt
 from problems_service import attach_problem_ids
 from routers.problems import router as problems_router
@@ -32,6 +35,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(problems_router)
+app.include_router(coach_router)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.include_router(auth_router)
@@ -114,24 +118,30 @@ def get_attempts(user_id: int, db: Session = Depends(get_db)):
 
 
 
+# @app.get("/topic-stats/{user_id}")
+# def get_topic_stats(user_id: int, db: Session = Depends(get_db)):
+#     """
+#     Returns solved-count per topic for this user (dynamic — any topic name).
+#     Used by Topic Tracker page.
+#     """
+#     rows = db.query(TopicProgress).filter(TopicProgress.user_id == user_id).all()
+#     total_attempts = sum(r.total_attempts for r in rows)
+#     acceptance_rate = (
+#         sum(r.count for r in rows) / total_attempts if total_attempts > 0 else 0
+#     )
+#     return {
+#         "user_id": user_id,
+#         "topics": {r.topic: r.count for r in rows},
+#         "acceptance_rate": round(acceptance_rate, 3),
+#         "total_attempts": total_attempts
+#     }
 @app.get("/topic-stats/{user_id}")
 def get_topic_stats(user_id: int, db: Session = Depends(get_db)):
     """
     Returns solved-count per topic for this user (dynamic — any topic name).
     Used by Topic Tracker page.
     """
-    rows = db.query(TopicProgress).filter(TopicProgress.user_id == user_id).all()
-    total_attempts = sum(r.total_attempts for r in rows)
-    acceptance_rate = (
-        sum(r.count for r in rows) / total_attempts if total_attempts > 0 else 0
-    )
-    return {
-        "user_id": user_id,
-        "topics": {r.topic: r.count for r in rows},
-        "acceptance_rate": round(acceptance_rate, 3),
-        "total_attempts": total_attempts
-    }
-
+    return topic_stats(db, user_id)
 
 
 @app.post("/predict")
@@ -142,12 +152,18 @@ def predict(stats: UserStats):
         stats.avg_attempts, stats.acceptance_rate
     )
 @app.post("/predict-difficulty")
-def predict_difficulty(data: DifficultyInput):
-    if not diff_model or not diff_vectorizer:
-        raise HTTPException(
-            status_code=503,
-            detail="Difficulty model not trained yet"
-        )
+def predict_difficulty_endpoint(data: DifficultyInput):
+    try:
+        return predict_difficulty(data.title, data.description)
+    except ModelNotTrained:
+        raise HTTPException(status_code=503, detail="Difficulty model not trained yet")
+# @app.post("/predict-difficulty")
+# def predict_difficulty(data: DifficultyInput):
+#     if not diff_model or not diff_vectorizer:
+#         raise HTTPException(
+#             status_code=503,
+#             detail="Difficulty model not trained yet"
+#         )
 
     text = data.title + " " + data.description[:300]
 
