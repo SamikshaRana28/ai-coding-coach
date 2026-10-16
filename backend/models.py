@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, JSON, ForeignKey
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -176,6 +176,15 @@ class UserProblem(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     __table_args__ = (UniqueConstraint("user_id", "problem_id", name="uq_user_problems_user_problem"),)
+# CoachMessage table - chat history with the Coach agent
+class CoachMessage(Base):
+    __tablename__ = "coach_messages"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    role = Column(String, nullable=False)        # user / assistant / tool
+    content = Column(Text, nullable=False, default="")
+    tool_calls = Column(JSON, nullable=True)     # tool requests / tool info / tools_used (see coach_router)
+    created_at = Column(DateTime, default=datetime.utcnow)
     
 # Tables banao database mein
 def create_tables():
