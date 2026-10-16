@@ -5,6 +5,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContai
 
 export default function Progress() {
   const { user } = useAuth()
+  
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
 

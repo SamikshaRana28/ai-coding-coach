@@ -1,54 +1,51 @@
-"""
-Alembic environment.
-
-- The URL/engine come from models.py (DATABASE_URL env var, sslmode handling for Neon).
-- Migrations in this project must be ADDITIVE and idempotent.
-- Do NOT import ml.progress here: it calls create_all() at import time.
-"""
 import os
 import sys
 from logging.config import fileConfig
+from pathlib import Path
 
 from alembic import context
+from dotenv import load_dotenv
+from sqlalchemy import engine_from_config, pool
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from models import Base, engine  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # make backend/ importable
+load_dotenv()
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
+
+database_url = os.getenv("DATABASE_URL")
+if not database_url:
+    raise RuntimeError("DATABASE_URL is not set (backend/.env or environment).")
+config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
+
+# Note: only the migrations in alembic/versions define the schema Alembic manages.
+# The older tables (users, attempts, topic_progress, progress_history) are still
+# created by the app's create_all() at startup, so don't use --autogenerate blindly.
+from models import Base  # noqa: E402
 
 target_metadata = Base.metadata
 
 
-def include_object(obj, name, type_, reflected, compare_to):
-    # Tables that exist in the DB but are not in models.py (leetcode_users,
-    # progress_history, ...) must never be proposed for dropping by autogenerate.
-    if type_ == "table" and reflected and compare_to is None:
-        return False
-    return True
-
-
 def run_migrations_offline() -> None:
     context.configure(
-        url=engine.url.render_as_string(hide_password=False),
+        url=config.get_main_option("sqlalchemy.url"),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        include_object=include_object,
     )
     with context.begin_transaction():
         context.run_migrations()
 
 
 def run_migrations_online() -> None:
-    with engine.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-            include_object=include_object,
-        )
+    connectable = engine_from_config(
+        config.get_section(config.config_ini_section, {}),
+        prefix="sqlalchemy.",
+        poolclass=pool.NullPool,
+    )
+    with connectable.connect() as connection:
+        context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()
 

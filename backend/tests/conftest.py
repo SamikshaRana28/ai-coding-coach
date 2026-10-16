@@ -1,112 +1,99 @@
-"""
-Shared test setup. Runs BEFORE any test module imports `main`/`models`.
-
-* Forces an in-memory SQLite DB so tests can never touch a real/Neon database,
-  even if a developer has DATABASE_URL in their shell or .env.
-* Sets a test-only JWT secret (not a real secret) and disables rate limiting
-  (the rate-limit test turns it back on for itself).
-* Stubs ml.recommender: the real one loads ml/questions_df.pkl and downloads the
-  fastembed model at import time - slow, needs network, and irrelevant to auth tests.
-"""
-import asyncio
 import os
 import sys
 import types
+from pathlib import Path
 
-import httpx
 import pytest
 
-BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if BACKEND_DIR not in sys.path:
-    sys.path.insert(0, BACKEND_DIR)
+BACKEND = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(BACKEND))
 
+# Never touch a real database from the tests (models.py reads this at import time).
 os.environ["DATABASE_URL"] = "sqlite://"
-os.environ["JWT_SECRET"] = "test-only-secret-not-for-production-0123456789"
-os.environ["RATE_LIMIT_ENABLED"] = "false"
-os.environ.pop("TRUSTED_PROXY_HOPS", None)
-os.environ.pop("CORS_ORIGINS", None)
+os.environ.pop("ADMIN_TOKEN", None)
 
-_fake_recommender = types.ModuleType("ml.recommender")
-_fake_recommender.get_similar_questions = lambda title, top_n=3: []
-sys.modules.setdefault("ml.recommender", _fake_recommender)
-
-
-class ApiClient:
-    """
-    Tiny sync wrapper over httpx's ASGI transport. Used instead of Starlette's
-    TestClient because the pinned httpx (0.28) is not compatible with the
-    TestClient shipped with the pinned FastAPI (0.111).
-    """
-
-    def __init__(self, app):
-        self.app = app
-
-    def request(self, method, url, **kwargs):
-        async def go():
-            transport = httpx.ASGITransport(app=self.app)
-            async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as c:
-                return await c.request(method, url, **kwargs)
-
-        return asyncio.run(go())
-
-    def get(self, url, **kw):
-        return self.request("GET", url, **kw)
-
-    def post(self, url, **kw):
-        return self.request("POST", url, **kw)
+# ml/recommender.py downloads/loads a sentence-transformer at import time. The API
+# tests don't need the real model, so stub it (unless something already imported it).
+if "ml.recommender" not in sys.modules:
+    _stub = types.ModuleType("ml.recommender")
+    _stub.get_similar_questions = lambda title, top_n=3: []
+    sys.modules["ml.recommender"] = _stub
 
 
-@pytest.fixture(scope="session")
-def main_module():
-    import main  # noqa: WPS433 (import after env is prepared)
+SEED_ROWS = [
+    {"title": "Two Sum", "slug": "two-sum", "difficulty": "Easy", "topics": ["arrays"],
+     "description": "Find two numbers that add up to target.", "url": "https://leetcode.com/problems/two-sum",
+     "acceptance_rate": 46.7},
+    {"title": "Add Two Numbers", "slug": "add-two-numbers", "difficulty": "Medium", "topics": ["math"],
+     "description": "Add two numbers stored as linked lists.", "url": None, "acceptance_rate": 35.7},
+    {"title": "Longest Palindromic Substring", "slug": "longest-palindromic-substring", "difficulty": "Medium",
+     "topics": ["dp", "strings"], "description": "Return the longest palindromic substring.", "url": None,
+     "acceptance_rate": 30.6},
+    {"title": "Number of Islands", "slug": "number-of-islands", "difficulty": "Medium", "topics": ["graphs"],
+     "description": "Count islands in a grid.", "url": None, "acceptance_rate": 48.0},
+    {"title": "Binary Tree Inorder Traversal", "slug": "binary-tree-inorder-traversal", "difficulty": "Easy",
+     "topics": ["trees"], "description": "Inorder traversal.", "url": None, "acceptance_rate": 70.1},
+    {"title": "Merge k Sorted Lists", "slug": "merge-k-sorted-lists", "difficulty": "Hard", "topics": ["others"],
+     "description": "Merge k sorted linked lists.", "url": None, "acceptance_rate": 40.2},
+]
 
-    return main
 
+class FakeReview:
+    """Stands in for the LLM: returns a canned review and records how it was called."""
 
-@pytest.fixture()
-def clean_db(main_module):
-    """Empty tables before and after the test (requested via `client` / `db`)."""
-    from models import Base, engine
+    def __init__(self):
+        from analysis import AnalyzeResponse
+        self._cls = AnalyzeResponse
+        self.bugs = "No bugs found"
+        self.error = None
+        self.calls = []
 
-    def wipe():
-        with engine.begin() as conn:
-            for table in reversed(Base.metadata.sorted_tables):
-                conn.execute(table.delete())
-
-    wipe()
-    yield
-    wipe()
+    def __call__(self, question, code, language="python", statement=None):
+        self.calls.append({"question": question, "code": code, "language": language, "statement": statement})
+        if self.error:
+            raise self.error
+        return self._cls(
+            time_complexity="O(n)", space_complexity="O(1)", bugs=self.bugs,
+            better_approach="This is optimal", similar_questions="- something similar",
+            interviewer_questions="1. q1\n2. q2\n3. q3",
+        )
 
 
 @pytest.fixture()
-def client(main_module, clean_db):
-    return ApiClient(main_module.app)
+def api(monkeypatch):
+    """TestClient on an in-memory SQLite DB with 6 seeded problems and a fake LLM."""
+    from types import SimpleNamespace
 
+    from fastapi.testclient import TestClient
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
 
-@pytest.fixture()
-def db(main_module, clean_db):
-    from models import SessionLocal
+    import main
+    import models
+    from routers import problems as problems_router
+    from scripts.seed_problems import seed
 
-    with SessionLocal() as session:
-        yield session
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    models.Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
 
+    def override_get_db():
+        db = Session()
+        try:
+            yield db
+        finally:
+            db.close()
 
-def signup(client, email="alice@example.com", password="correct-horse-1", name="Alice Smith", **extra):
-    return client.post("/auth/signup", json={"email": email, "password": password, "name": name, **extra})
+    main.app.dependency_overrides[models.get_db] = override_get_db
 
+    fake = FakeReview()
+    monkeypatch.setattr(problems_router, "run_analysis", fake)
+    monkeypatch.setattr(main, "run_analysis", fake)
 
-def auth_header(token):
-    return {"Authorization": f"Bearer {token}"}
+    db = Session()
+    seed(db, [dict(r) for r in SEED_ROWS])
+    db.close()
 
-
-@pytest.fixture()
-def make_user(client):
-    """Signs a user up and returns (user_dict, headers)."""
-
-    def _make(email="alice@example.com", name="Alice Smith", password="correct-horse-1"):
-        resp = signup(client, email=email, password=password, name=name)
-        assert resp.status_code == 201, resp.text
-        body = resp.json()
-        return body["user"], auth_header(body["access_token"])
-
-    return _make
+    yield SimpleNamespace(client=TestClient(main.app), Session=Session, llm=fake, main=main)
+    main.app.dependency_overrides.clear()
