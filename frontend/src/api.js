@@ -76,6 +76,14 @@ export const submitProblem = (id, data) =>
 export const markProblemSolved = (id) =>
   api.post(`/problems/${id}/mark-solved`, null, { headers: userHeaders })
 
+// Interview agent
+export const getInterviewTopics = () => api.get('/interview/topics')
+export const startInterview = (data) => api.post('/interview/start', data)
+export const sendAnswer = (id, data) => api.post(`/interview/${id}/answer`, data)
+export const getInterview = (id) => api.get(`/interview/${id}`)
+export const getScorecard = (id) => api.get(`/interview/${id}/scorecard`)
+export const getWeakPatterns = (userId) => api.get(`/weak-patterns/${userId}`)
+
 // FastAPI errors
 export const errorMessage = (e) => {
   const detail = e?.response?.data?.detail

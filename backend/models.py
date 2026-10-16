@@ -145,6 +145,38 @@ class InterviewTurn(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+from sqlalchemy import Float, JSON, UniqueConstraint  # noqa: E402
+
+
+# Problem table - the browsable question bank (seeded from the LeetCode CSV, plus custom ones)
+class Problem(Base):
+    __tablename__ = "problems"
+    id = Column(Integer, primary_key=True)
+    title = Column(String, nullable=False)
+    slug = Column(String, nullable=False, unique=True, index=True)
+    difficulty = Column(String, nullable=False, index=True)    # Easy / Medium / Hard
+    topics = Column(JSON, nullable=False, default=list)        # app topics, primary first
+    description = Column(Text, nullable=False, default="")
+    url = Column(String, nullable=True)                        # optional external link
+    acceptance_rate = Column(Float, nullable=True)             # percent, 0-100
+    source = Column(String, nullable=False, default="leetcode", server_default="leetcode")  # leetcode / custom
+
+
+# UserProblem table - one row per (user, problem): status + latest code
+class UserProblem(Base):
+    __tablename__ = "user_problems"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    problem_id = Column(Integer, ForeignKey("problems.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String, nullable=False, default="todo", server_default="todo")  # todo / attempted / solved
+    attempts_count = Column(Integer, nullable=False, default=0, server_default="0")
+    hints_used = Column(Integer, nullable=False, default=0, server_default="0")
+    last_code = Column(Text, nullable=True)
+    solved_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("user_id", "problem_id", name="uq_user_problems_user_problem"),)
+    
 # Tables banao database mein
 def create_tables():
     Base.metadata.create_all(engine)
