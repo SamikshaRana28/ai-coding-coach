@@ -7,6 +7,11 @@ from models import get_db, Attempt, TopicProgress, create_tables
 from analysis import AnalyzeResponse, run_analysis, record_attempt
 from problems_service import attach_problem_ids
 from routers.problems import router as problems_router
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from auth import router as auth_router, limiter
+from interview_router import router as interview_router
+from agent.tools import get_weak_patterns_text
 from ml.predict import predict_weak_topic
 from ml.recommender import get_similar_questions
 from ml.score import calculate_readiness_score
@@ -27,6 +32,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(problems_router)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.include_router(auth_router)
+app.include_router(interview_router)
 
 # Groq client + the review prompt live in analysis.py (shared with /problems/{id}/submit)
 
