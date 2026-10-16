@@ -42,6 +42,11 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d coding_coach"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
 
   backend:
     build: ./backend
@@ -50,11 +55,13 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:password@db:5432/coding_coach
       GROQ_API_KEY: ${GROQ_API_KEY}
-      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}   # enables POST /admin/problems when set
     depends_on:
-      - db
+      db:
+        condition: service_healthy   # `alembic upgrade head` runs on start
     volumes:
       - ./backend:/app
+      - ./data:/data:ro              # dataset for `python -m scripts.seed_problems`
 
   frontend:
     build: ./frontend

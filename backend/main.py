@@ -1,25 +1,16 @@
-from fastapi import FastAPI, HTTPException, Depends, Request
-from fastapi.exception_handlers import request_validation_exception_handler
-from fastapi.exceptions import RequestValidationError
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import Optional
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
 from dotenv import load_dotenv
-from groq import Groq
 from sqlalchemy.orm import Session
-from models import get_db, Attempt, TopicProgress, User, create_tables
-from auth import router as auth_router, limiter, get_current_user, require_path_user
+from models import get_db, Attempt, TopicProgress, create_tables
+from analysis import AnalyzeResponse, run_analysis, record_attempt
+from problems_service import attach_problem_ids
+from routers.problems import router as problems_router
 from ml.predict import predict_weak_topic
 from ml.recommender import get_similar_questions
-from ml.rag_context import build_similar_questions_context
 from ml.score import calculate_readiness_score
 from ml.progress import get_or_generate_progress
-from interview_router import router as interview_router
-from agent.tools import get_weak_patterns_text
-import os
 import json
 from pathlib import Path
 import joblib
@@ -29,39 +20,15 @@ load_dotenv()
 app = FastAPI(title="AI Coding Coach")
 create_tables()
 
-app.include_router(interview_router)
-# CORS_ORIGINS="https://your-app.vercel.app,http://localhost:5173" restricts origins.
-# Unset => "*" (unchanged behaviour). Auth uses Bearer headers, not cookies.
-_cors_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()] or ["*"]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_cors_origins,
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(problems_router)
 
-# ── Auth wiring ────────────────────────────────────────────────────────────
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-app.include_router(auth_router)
-
-
-@app.exception_handler(RequestValidationError)
-async def _validation_error_handler(request: Request, exc: RequestValidationError):
-    # Pydantic echoes the offending input in 422 bodies. For /auth/* that input
-    # can be a password, so strip it. All other routes keep the default response.
-    if request.url.path.startswith("/auth"):
-        errors = [
-            {"type": e.get("type"), "loc": list(e.get("loc", [])), "msg": e.get("msg")}
-            for e in exc.errors()
-        ]
-        return JSONResponse(status_code=422, content={"detail": errors})
-    return await request_validation_exception_handler(request, exc)
-
-# ✅ FIX: Groq crash nahi karega agar key missing ho
-groq_api_key = os.getenv("GROQ_API_KEY")
-client = Groq(api_key=groq_api_key) if groq_api_key else None
+# Groq client + the review prompt live in analysis.py (shared with /problems/{id}/submit)
 
 MODELS_DIR = Path(__file__).parent / "ml" / "models"
 
@@ -79,15 +46,7 @@ class AnalyzeRequest(BaseModel):
     language: str = "python"
     topic: str = "general"
     difficulty: str = "medium"
-    user_id: Optional[int] = None  # deprecated + ignored: identity comes from the auth token
-
-class AnalyzeResponse(BaseModel):
-    time_complexity: str
-    space_complexity: str
-    bugs: str
-    better_approach: str
-    similar_questions: str
-    interviewer_questions: str
+    user_id: int = 1
 
 class UserStats(BaseModel):
     arrays_solved: int
@@ -112,112 +71,27 @@ def root():
 
 
 @app.post("/analyze", response_model=AnalyzeResponse)
-def analyze_code(
-    request: AnalyzeRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    uid = current_user.id  # verified identity from the token (body user_id is ignored)
-    if not client:
-        raise HTTPException(status_code=503, detail="GROQ_API_KEY .env mein set karo")
-
-    retrieved_context = build_similar_questions_context(request.question)
-    weak_context = get_weak_patterns_text(db, uid)
-
-    prompt = f"""
-You are a strict, expert coding interview coach reviewing a candidate's submission. Be critical and precise — do not assume the code is correct.
-
-Problem: {request.question}
-Code ({request.language}):
-{request.code}
-
-Here are real similar questions retrieved from our question database — use these, don't invent your own:
-{retrieved_context}
-
-Known weak patterns of this candidate (from past mock interviews): {weak_context}
-If relevant to this problem, tailor your feedback and hints to these weaknesses.
-
-IMPORTANT: First check if the code actually attempts to solve the stated problem. If the code is unrelated to the problem (e.g. solves a completely different algorithm), set BUGS to "MISMATCH: Code does not address the stated problem - it implements [what it actually does] instead", and set TIME_COMPLEXITY/SPACE_COMPLEXITY to the complexity of what the code DOES do (not "N/A").
-
-If the code DOES attempt the stated problem, then check for syntax errors first (invalid statements, wrong punctuation, mismatched brackets) — report these in BUGS. Then check logic errors and edge cases.
-
-Code ({request.language}):
-{request.code}
-
-First, check carefully for syntax errors (e.g. invalid statements, wrong punctuation like a semicolon in Python, mismatched brackets, indentation errors) — these would prevent the code from running at all. If there is a syntax error, that IS a bug and must be reported first.
-
-Then check for logic errors, edge cases (empty input, no solution found, duplicates), and correctness vs the problem statement.
-
-Reply in EXACTLY this format, one per line:
-
-TIME_COMPLEXITY: [answer, or "N/A - syntax error" if code doesn't run]
-SPACE_COMPLEXITY: [answer, or "N/A - syntax error" if code doesn't run]
-BUGS: [list ALL bugs found, including syntax errors, with line references. If truly no bugs exist, write "No bugs found"]
-BETTER_APPROACH: [better approach, or "This is optimal" only if code is correct and already optimal]
-SIMILAR_QUESTIONS: [pick from the retrieved list above, explain briefly why each is similar]
-INTERVIEWER_QUESTIONS: [3 interview questions]
-"""
+def analyze_code(request: AnalyzeRequest, db: Session = Depends(get_db)):
+    result = run_analysis(request.question, request.code, request.language)
     try:
-        response = client.chat.completions.create(
-            model="openai/gpt-oss-120b",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=1000,
-        )
-        response_text = response.choices[0].message.content
-
-        def extract(label):
-            for line in response_text.split("\n"):
-                if line.startswith(label + ":"):
-                    return line.replace(label + ":", "").strip()
-            return "Not found"
-
-        result = AnalyzeResponse(
-            time_complexity=extract("TIME_COMPLEXITY"),
-            space_complexity=extract("SPACE_COMPLEXITY"),
-            bugs=extract("BUGS"),
-            better_approach=extract("BETTER_APPROACH"),
-            similar_questions=extract("SIMILAR_QUESTIONS"),
-            interviewer_questions=extract("INTERVIEWER_QUESTIONS"),
-        )
-
-        attempt = Attempt(
-            user_id=uid,
+        record_attempt(
+            db,
+            user_id=request.user_id,
             question=request.question,
             code=request.code,
             topic=request.topic,
             difficulty=request.difficulty,
-            time_complexity=result.time_complexity,
-            space_complexity=result.space_complexity,
-            bugs_found=0 if result.bugs == "No bugs found" else 1,
+            result=result,
         )
-        db.add(attempt)
-        # Auto-update topic progress
-        tp = db.query(TopicProgress).filter(
-            TopicProgress.user_id == uid,
-            TopicProgress.topic == request.topic
-        ).first()
-
-        if tp:
-            tp.total_attempts += 1
-            if result.bugs == "No bugs found":
-                tp.count += 1
-        else:
-            tp = TopicProgress(
-                user_id=uid,
-                topic=request.topic,
-                count=1 if result.bugs == "No bugs found" else 0,
-                total_attempts=1
-            )
-            db.add(tp)
         db.commit()
         return result
-
     except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/attempts/{user_id}")
-def get_attempts(user_id: int, db: Session = Depends(get_db), _user: User = Depends(require_path_user)):
+def get_attempts(user_id: int, db: Session = Depends(get_db)):
     attempts = db.query(Attempt).filter(Attempt.user_id == user_id).all()
     return {"total": len(attempts), "attempts": [
         {
@@ -232,7 +106,7 @@ def get_attempts(user_id: int, db: Session = Depends(get_db), _user: User = Depe
 
 
 @app.get("/topic-stats/{user_id}")
-def get_topic_stats(user_id: int, db: Session = Depends(get_db), _user: User = Depends(require_path_user)):
+def get_topic_stats(user_id: int, db: Session = Depends(get_db)):
     """
     Returns solved-count per topic for this user (dynamic — any topic name).
     Used by Topic Tracker page.
@@ -286,8 +160,9 @@ def predict_difficulty(data: DifficultyInput):
     }
 
 @app.post("/recommend")
-def recommend(data: QuestionInput):
-    return {"similar_questions": get_similar_questions(data.title)}
+def recommend(data: QuestionInput, db: Session = Depends(get_db)):
+    # same response as before, plus a nullable `problem_id` on each item
+    return {"similar_questions": attach_problem_ids(db, get_similar_questions(data.title))}
 
 
 @app.post("/score")
@@ -374,7 +249,7 @@ def get_model_evaluation():
 
 
 @app.get("/progress/{user_id}")
-def get_progress(user_id: int, db: Session = Depends(get_db), _user: User = Depends(require_path_user)):
+def get_progress(user_id: int, db: Session = Depends(get_db)):
     """
     Weekly readiness score progression.
     Real attempts se calculate karta hai, warna demo data dikhata hai.

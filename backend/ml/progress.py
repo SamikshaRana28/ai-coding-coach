@@ -33,12 +33,13 @@ Base.metadata.create_all(engine)
 def get_or_generate_progress(user_id: int, db: Session) -> list[dict]:
     """
     Returns weekly progress for a user.
-    If real data exists → computes from attempts.
-    If not enough real data → seeds realistic demo progression.
+    If the user has any real attempts → computes from them.
+    If they have none yet → seeds a realistic demo progression.
     """
     real_progress = _compute_real_progress(user_id, db)
 
-    if len(real_progress) >= 2:
+    # one week of real attempts is enough: a user's own data must beat the demo curve
+    if len(real_progress) >= 1:
         return real_progress
 
     # Seed demo data if user has no history yet
@@ -73,7 +74,7 @@ def _compute_real_progress(user_id: int, db: Session) -> list[dict]:
         week_key = a.created_at.strftime("%Y-W%W")
         weeks.setdefault(week_key, []).append(a)
 
-    if len(weeks) < 2:
+    if len(weeks) < 1:
         return []
 
     result = []

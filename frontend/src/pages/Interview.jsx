@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { startInterview, sendAnswer, getInterview, getScorecard, getInterviewTopics } from '../api'
-
-const STORAGE_KEY = 'interview_session_id'
+import { useAuth } from '../auth/useAuth'
 
 export default function Interview() {
+  const { user } = useAuth()
+  const STORAGE_KEY = `interview_session_id_${user.id}` // har user ka apna session
   const [topics, setTopics] = useState(['arrays'])
   const [topic, setTopic] = useState('arrays')
   const [sessionId, setSessionId] = useState(null)
@@ -16,45 +17,36 @@ export default function Interview() {
   const [scorecard, setScorecard] = useState(null)
   const bottomRef = useRef(null)
 
+  // Page reload ya server restart ke baad session DB se wapas aata hai
   useEffect(() => {
     getInterviewTopics().then((r) => setTopics(r.data.topics)).catch(() => {})
     const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved) resume(saved)
-  }, [])
+    if (!saved) return
+    getInterview(saved)
+      .then((r) => {
+        setSessionId(r.data.session_id)
+        setMessages(r.data.history)
+        setStatus(r.data.status)
+        setTurns({ used: r.data.turns_used, max: r.data.max_turns })
+        if (r.data.status === 'finished') {
+          getScorecard(saved).then((sc) => setScorecard(sc.data)).catch(() => {})
+        }
+      })
+      .catch(() => localStorage.removeItem(STORAGE_KEY))
+  }, [STORAGE_KEY])
+
+  const loadScorecard = (id) => getScorecard(id).then((r) => setScorecard(r.data)).catch(() => {})
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
-
-  const loadScorecard = async (id) => {
-    try {
-      const r = await getScorecard(id)
-      setScorecard(r.data)
-    } catch {
-      /* expired session: scorecard nahi hota */
-    }
-  }
-
-  // Page reload ya server restart ke baad session DB se wapas aata hai
-  const resume = async (id) => {
-    try {
-      const r = await getInterview(id)
-      setSessionId(r.data.session_id)
-      setMessages(r.data.history)
-      setStatus(r.data.status)
-      setTurns({ used: r.data.turns_used, max: r.data.max_turns })
-      if (r.data.status === 'finished') loadScorecard(id)
-    } catch {
-      localStorage.removeItem(STORAGE_KEY)
-    }
-  }
 
   const handleStart = async () => {
     setLoading(true)
     setError(null)
     setScorecard(null)
     try {
-      const r = await startInterview({ topic })
+      const r = await startInterview({ user_id: user.id, topic })
       localStorage.setItem(STORAGE_KEY, r.data.session_id)
       setSessionId(r.data.session_id)
       setMessages([{ role: 'assistant', content: r.data.reply }])

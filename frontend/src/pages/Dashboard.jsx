@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { getScore, predictWeakTopic } from '../api'
+import { useState, useEffect } from 'react'
+import { api, getScore, predictWeakTopic, CURRENT_USER_ID } from '../api'
 
 const defaultStats = {
   arrays_solved: 25, graphs_solved: 10, dp_solved: 8,
@@ -12,17 +12,18 @@ export default function Dashboard() {
   const [score, setScore] = useState(null)
   const [weakTopic, setWeakTopic] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [fromHistory, setFromHistory] = useState(false)
 
   const handleChange = (key, value) => {
     setStats((prev) => ({ ...prev, [key]: parseFloat(value) || 0 }))
   }
 
-  const handleCalculate = async () => {
+  const runCalculation = async (s) => {
     setLoading(true)
     try {
       const [scoreRes, weakRes] = await Promise.all([
-        getScore(stats),
-        predictWeakTopic(stats),
+        getScore(s),
+        predictWeakTopic(s),
       ])
       setScore(scoreRes.data)
       setWeakTopic(weakRes.data)
@@ -33,6 +34,34 @@ export default function Dashboard() {
     }
   }
 
+  const handleCalculate = () => runCalculation(stats)
+
+  // Start from the user's real activity (Problems + Code Analyzer) when there is any;
+  // otherwise keep the demo numbers. The fields stay editable for what-if experiments.
+  useEffect(() => {
+    let cancelled = false
+    api.get(`/topic-stats/${CURRENT_USER_ID}`)
+      .then((res) => {
+        const d = res.data
+        if (cancelled || !d.total_attempts) return
+        const t = d.topics || {}
+        const next = {
+          arrays_solved: t.arrays || 0, graphs_solved: t.graphs || 0, dp_solved: t.dp || 0,
+          trees_solved: t.trees || 0, strings_solved: t.strings || 0, math_solved: t.math || 0,
+          acceptance_rate: d.acceptance_rate,
+        }
+        const solved = next.arrays_solved + next.graphs_solved + next.dp_solved +
+          next.trees_solved + next.strings_solved + next.math_solved
+        next.avg_attempts = Number((d.total_attempts / Math.max(solved, 1)).toFixed(1))
+        setStats(next)
+        setFromHistory(true)
+        runCalculation(next)
+      })
+      .catch(() => { /* backend unreachable: stay on the demo numbers */ })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const totalSolved = stats.arrays_solved + stats.graphs_solved + stats.dp_solved +
     stats.trees_solved + stats.strings_solved + stats.math_solved
 
@@ -40,7 +69,10 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">📈 Dashboard</h1>
-        <p className="text-slate-500 mt-1">Your interview readiness at a glance</p>
+        <p className="text-slate-500 mt-1">
+          Your interview readiness at a glance
+          {fromHistory && ' — loaded from your solved problems (edit the numbers to experiment)'}
+        </p>
       </div>
 
       <div className="grid md:grid-cols-3 gap-6">
