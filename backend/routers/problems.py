@@ -111,7 +111,7 @@ def _list_item(p: Problem, up: Optional[UserProblem]) -> dict:
         "url": p.url,
         "status": up.status if up else "todo",
         "attempts_count": up.attempts_count if up else 0,
-        "attempts_count": up.attempts_count if up else 0,
+        "hints_used": up.hints_used if up else 0,
     }
 
 
@@ -121,7 +121,7 @@ def _detail(p: Problem, up: Optional[UserProblem], hints: Optional[list] = None)
         "description": p.description,
         "last_code": up.last_code if up else None,
         "solved_at": _iso(up.solved_at) if up else None,
-        "hints_used": up.hints_used if up else 0,
+        "hints": hints_as_dicts(hints or []),
         "max_hint_level": MAX_LEVEL,
     }
 
