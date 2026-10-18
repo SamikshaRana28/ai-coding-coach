@@ -2,7 +2,7 @@
 from tests.conftest import SEED_ROWS
 
 CODE = "def two_sum(nums, target):\n    return []"
-USER2 = {"X-User-Id": "2"}
+# USER2 = {"X-User-Id": "2"}
 
 
 def ids_by_slug(api):
@@ -104,15 +104,27 @@ def test_status_is_per_user_and_filterable(api):
     assert mine["total"] == 1 and mine["items"][0]["id"] == pid
     assert api.client.get("/problems", params={"status": "todo"}).json()["total"] == 5
 
-    theirs = api.client.get("/problems", params={"status": "solved"}, headers=USER2).json()
+    theirs = api.client.get("/problems", params={"status": "solved"}, headers=api.h2).json()
     assert theirs["total"] == 0
-    other = [p for p in api.client.get("/problems", headers=USER2).json()["items"] if p["id"] == pid][0]
+    other = [p for p in api.client.get("/problems", headers=api.h2).json()["items"] if p["id"] == pid][0]
     assert other["status"] == "todo"
 
 
-def test_bad_user_header(api):
-    assert api.client.get("/problems", headers={"X-User-Id": "0"}).status_code == 400
-    assert api.client.get("/problems", headers={"X-User-Id": "abc"}).status_code == 422
+def test_problems_require_login_and_ignore_x_user_id(api):
+    from fastapi.testclient import TestClient
+
+    anon = TestClient(api.main.app)                       # no Authorization header
+    assert anon.get("/problems").status_code == 401
+    assert anon.get("/problems", headers={"X-User-Id": "1"}).status_code == 401   # header is NOT identity
+    assert anon.get("/problems/1").status_code == 401
+    assert anon.post("/problems/1/submit", json={"code": "x"}).status_code == 401
+    assert anon.post("/problems/1/mark-solved").status_code == 401
+
+    # a spoofed header cannot make user 1 act as user 2
+    pid = ids_by_slug(api)["two-sum"]
+    submit(api, pid)                                      # user 1 solves it
+    spoofed = api.client.get("/problems", params={"status": "solved"}, headers={"X-User-Id": "2"}).json()
+    assert spoofed["total"] == 1                          # still user 1's data
 
 
 # ── detail ────────────────────────────────────────────────────────────────────
@@ -126,7 +138,7 @@ def test_detail_includes_user_state(api):
     d = api.client.get(f"/problems/{pid}").json()
     assert d["last_code"] == "print('mine')" and d["status"] == "solved" and d["solved_at"]
     # another user still sees a clean slate
-    assert api.client.get(f"/problems/{pid}", headers=USER2).json()["last_code"] is None
+    assert api.client.get(f"/problems/{pid}", headers=api.h2).json()["last_code"] is None
 
 
 def test_detail_404(api):

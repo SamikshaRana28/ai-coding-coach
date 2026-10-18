@@ -177,6 +177,21 @@ class UserProblem(Base):
 
     __table_args__ = (UniqueConstraint("user_id", "problem_id", name="uq_user_problems_user_problem"),)
 # CoachMessage table - chat history with the Coach agent
+
+
+# HintEvent table (Part 4) - one row per (user, problem, level): the hint text that was
+# shown. It doubles as the cache, so clicking Hint again never calls the LLM again and
+# the hint a student saw stays the same when they reopen the problem.
+class HintEvent(Base):
+    __tablename__ = "hint_events"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    problem_id = Column(Integer, ForeignKey("problems.id", ondelete="CASCADE"), nullable=False, index=True)
+    level = Column(Integer, nullable=False)          # 1 (nudge) .. 3 (pseudo-code outline)
+    hint_text = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("user_id", "problem_id", "level", name="uq_hint_events_user_problem_level"),)
 class CoachMessage(Base):
     __tablename__ = "coach_messages"
     id = Column(Integer, primary_key=True)

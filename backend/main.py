@@ -1,18 +1,23 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from user_stats import topic_stats, get_topic_stats
+# from user_stats import topic_stats, get_topic_stats
+from user_stats import topic_stats
 from dotenv import load_dotenv
 from ml.difficulty_predict import predict_difficulty, ModelNotTrained
 from sqlalchemy.orm import Session
-from models import get_db, Attempt, TopicProgress, create_tables
+from models import get_db, Attempt, TopicProgress, User, create_tables
 from coach_router import router as coach_router
 from analysis import AnalyzeResponse, run_analysis, record_attempt
 from problems_service import attach_problem_ids
 from routers.problems import router as problems_router
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from auth import router as auth_router, limiter
+# from auth import router as auth_router, limiter
+from auth import router as auth_router, limiter, get_current_user, require_path_user
 from interview_router import router as interview_router
 from agent.tools import get_weak_patterns_text
 from ml.predict import predict_weak_topic
@@ -38,6 +43,14 @@ app.include_router(problems_router)
 app.include_router(coach_router)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request, exc: RequestValidationError):
+    """422 without echoing what the client sent (FastAPI's default includes `input`,
+    which would send a rejected password straight back in the response body)."""
+    errors = [{k: v for k, v in e.items() if k not in ("input", "ctx")} for e in exc.errors()]
+    return JSONResponse(status_code=422, content={"detail": jsonable_encoder(errors)})
 app.include_router(auth_router)
 app.include_router(interview_router)
 
@@ -84,12 +97,16 @@ def root():
 
 
 @app.post("/analyze", response_model=AnalyzeResponse)
-def analyze_code(request: AnalyzeRequest, db: Session = Depends(get_db)):
+def analyze_code(
+    request: AnalyzeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     result = run_analysis(request.question, request.code, request.language)
     try:
         record_attempt(
             db,
-            user_id=request.user_id,
+            user_id=current_user.id,        # from the JWT; request.user_id is ignored
             question=request.question,
             code=request.code,
             topic=request.topic,
@@ -104,7 +121,8 @@ def analyze_code(request: AnalyzeRequest, db: Session = Depends(get_db)):
 
 
 @app.get("/attempts/{user_id}")
-def get_attempts(user_id: int, db: Session = Depends(get_db)):
+def get_attempts(user_id: int, db: Session = Depends(get_db),
+                 _user: User = Depends(require_path_user)):
     attempts = db.query(Attempt).filter(Attempt.user_id == user_id).all()
     return {"total": len(attempts), "attempts": [
         {
@@ -136,7 +154,8 @@ def get_attempts(user_id: int, db: Session = Depends(get_db)):
 #         "total_attempts": total_attempts
 #     }
 @app.get("/topic-stats/{user_id}")
-def get_topic_stats(user_id: int, db: Session = Depends(get_db)):
+def get_topic_stats(user_id: int, db: Session = Depends(get_db),
+                    _user: User = Depends(require_path_user)):
     """
     Returns solved-count per topic for this user (dynamic — any topic name).
     Used by Topic Tracker page.
@@ -274,7 +293,8 @@ def get_model_evaluation():
 
 
 @app.get("/progress/{user_id}")
-def get_progress(user_id: int, db: Session = Depends(get_db)):
+def get_progress(user_id: int, db: Session = Depends(get_db),
+                 _user: User = Depends(require_path_user)):
     """
     Weekly readiness score progression.
     Real attempts se calculate karta hai, warna demo data dikhata hai.

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { api, getScore, predictWeakTopic, CURRENT_USER_ID } from '../api'
+import { api, getScore, predictWeakTopic, getProblemStats } from '../api'
+import { useAuth } from '../auth/useAuth'
 
 const defaultStats = {
   arrays_solved: 25, graphs_solved: 10, dp_solved: 8,
@@ -8,11 +9,13 @@ const defaultStats = {
 }
 
 export default function Dashboard() {
+  const { user } = useAuth()
   const [stats, setStats] = useState(defaultStats)
   const [score, setScore] = useState(null)
   const [weakTopic, setWeakTopic] = useState(null)
   const [loading, setLoading] = useState(false)
   const [fromHistory, setFromHistory] = useState(false)
+  const [problemStats, setProblemStats] = useState(null)   // Part 4: solved / solved without hints
 
   const handleChange = (key, value) => {
     setStats((prev) => ({ ...prev, [key]: parseFloat(value) || 0 }))
@@ -40,7 +43,7 @@ export default function Dashboard() {
   // otherwise keep the demo numbers. The fields stay editable for what-if experiments.
   useEffect(() => {
     let cancelled = false
-    api.get(`/topic-stats/${CURRENT_USER_ID}`)
+        api.get(`/topic-stats/${user.id}`)
       .then((res) => {
         const d = res.data
         if (cancelled || !d.total_attempts) return
@@ -60,6 +63,14 @@ export default function Dashboard() {
       .catch(() => { /* backend unreachable: stay on the demo numbers */ })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+    // Solved vs. solved-without-hints, from the Problems page (not editable, it is real data).
+  useEffect(() => {
+    let cancelled = false
+    getProblemStats()
+      .then((res) => { if (!cancelled) setProblemStats(res.data) })
+      .catch(() => { /* backend unreachable: just hide the card row */ })
+    return () => { cancelled = true }
   }, [])
 
   const totalSolved = stats.arrays_solved + stats.graphs_solved + stats.dp_solved +
@@ -126,7 +137,14 @@ export default function Dashboard() {
             <StatCard label="Total Solved" value={totalSolved} />
             <StatCard label="Acceptance Rate" value={`${(stats.acceptance_rate * 100).toFixed(0)}%`} />
           </div>
-
+                    {problemStats && (
+            <div className="grid grid-cols-3 gap-4">
+              <StatCard label="Problems Solved" value={problemStats.solved} />
+              <StatCard label="Solved Without Hints" value={problemStats.solved_without_hints} />
+              <StatCard label="Hints Used" value={problemStats.total_hints_used} />
+            </div>
+          )}
+          
           {weakTopic && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
               <h3 className="font-semibold">⚠️ Weakest Topic: <span className="capitalize">{weakTopic.weak_topic}</span></h3>

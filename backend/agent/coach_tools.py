@@ -110,6 +110,13 @@ class GetProblemArgs(Args):
 
 
 # ── tool functions (each returns a small JSON-able dict) ────────────────────
+
+
+class GetHintArgs(Args):
+    # No `level` argument on purpose: the server always gives the NEXT level (1 -> 3), exactly like
+    # the Hint button, so the model cannot skip ahead to the outline.
+    problem_id: int = Field(ge=1, description="Id of the problem the student is stuck on")
+
 def _data_flags(total_attempts: int) -> dict:
     return {"total_attempts": total_attempts, "low_data": total_attempts < LOW_DATA_ATTEMPTS}
 
@@ -247,6 +254,31 @@ def t_get_problem(ctx: ToolContext, args: GetProblemArgs) -> dict:
         "your_last_code": (up.last_code or "")[:1500] if up else "",
     }
 
+def t_get_hint(ctx: ToolContext, args: GetHintArgs) -> dict:
+    """Part 4: same level logic + cache as POST /problems/{id}/hint (see hints.py)."""
+    from hints import MAX_LEVEL, HintError, reveal_hint      # lazy: keeps the tool module light
+
+    p = ctx.db.get(Problem, args.problem_id)
+    if not p:
+        return {"error": f"No problem with id {args.problem_id}"}
+    try:
+        r = reveal_hint(ctx.db, ctx.user_id, p)              # next level for THIS student only
+    except HintError as e:
+        return {"error": str(e)}
+    note = ("Pass this hint on to the student (you may rephrase it lightly). Do NOT add code and do NOT "
+            "reveal more than this hint. If they still need help, they can ask again for the next level.")
+    if not r.is_new:
+        note = (f"All {MAX_LEVEL} hints are already used. Repeat or explain hint {r.level} if useful, "
+                "but do NOT write the full solution; ask a guiding question instead.")
+    return {
+        "problem": p.title,
+        "hint_level": r.level,
+        "of": MAX_LEVEL,
+        "hint": r.text,
+        "newly_unlocked": r.is_new,
+        "hints_used": r.hints_used,
+        "note": note,
+    }
 
 # ── registry ────────────────────────────────────────────────────────────────
 @dataclass
@@ -286,6 +318,12 @@ TOOLS: Dict[str, Tool] = {
              "Get one problem's description plus this student's status, attempts and last code.",
              GetProblemArgs, t_get_problem),
         # Parts 4-6 add more tools here: get_hint, get_study_plan, ...
+        Tool("get_hint",
+             "Reveal the NEXT hint (level 1 of 3, then 2, then 3) for a problem, using the same rules as the "
+             "Hint button. Call it ONLY when the student asked for a hint or help on that problem. Never "
+             "call it on your own.",
+             GetHintArgs, t_get_hint),
+        # Parts 5-6 add more tools here: get_study_plan, ...
     ]
 }
 

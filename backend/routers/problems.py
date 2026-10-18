@@ -2,9 +2,8 @@
 Problems API: browse the question bank, open a problem, submit code for AI review,
 track per-user status.
 
-Auth note: the app has no login yet (every page hard-codes user 1). All "per user"
-behaviour goes through `current_user_id`, which reads the X-User-Id header and
-defaults to 1, so real auth later only has to replace that one dependency.
+Auth: every per-user endpoint gets its user from the JWT (`current_user_id` ->
+auth.get_current_user). The user id is never read from a header, path or body.
 """
 import math
 import os
@@ -19,7 +18,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, defer
 
 from analysis import bugs_clean, record_attempt, run_analysis
-from models import Problem, UserProblem, get_db
+from auth import get_current_user
+from coach_router import RateLimiter
+from hints import (
+    MAX_LEVEL, HintError, HintRateLimited, hint_summary, hints_as_dicts, list_hints, reveal_hint,
+)
+from models import Problem, User, UserProblem, get_db
 from problem_utils import normalize_difficulty, primary_topic
 from problems_service import (
     STATUSES, ProblemExists, create_custom_problem, get_or_create_user_problem,
@@ -28,15 +32,14 @@ from problems_service import (
 
 router = APIRouter(tags=["problems"])
 
+# LLM hint generations per user per minute (cached hints are free and not counted).
+hint_limiter = RateLimiter(10)
+
 
 # ── dependencies ───────────────────────────────────────────────────────────────
-def current_user_id(x_user_id: Optional[int] = Header(default=None)) -> int:
-    """The acting user. No auth yet: X-User-Id header, defaulting to 1 like the rest of the app."""
-    if x_user_id is None:
-        return 1
-    if x_user_id < 1:
-        raise HTTPException(status_code=400, detail="X-User-Id must be a positive integer")
-    return x_user_id
+def current_user_id(user: User = Depends(get_current_user)) -> int:
+    """The acting user's id, taken from the verified JWT (never from a header/path/body)."""
+    return user.id
 
 
 def require_admin(x_admin_token: Optional[str] = Header(default=None)) -> None:
@@ -60,6 +63,17 @@ class SubmitRequest(BaseModel):
             raise ValueError("code must not be empty")
         return v
 
+
+
+class HintRequest(BaseModel):
+    """Body of POST /problems/{id}/hint. Both fields are optional: an empty body = "next hint"."""
+    level: Optional[int] = Field(default=None, ge=1, le=MAX_LEVEL)   # normally omitted; must be an unlocked level or the next one
+    code: Optional[str] = Field(default=None, max_length=8000)       # unsaved editor text, used only to make the hint fit
+
+    @field_validator("code")
+    @classmethod
+    def code_ok(cls, v: Optional[str]) -> Optional[str]:
+        return v if v and v.strip() else None
 
 class CustomProblemIn(BaseModel):
     title: str = Field(min_length=1, max_length=200)
@@ -97,16 +111,18 @@ def _list_item(p: Problem, up: Optional[UserProblem]) -> dict:
         "url": p.url,
         "status": up.status if up else "todo",
         "attempts_count": up.attempts_count if up else 0,
+        "attempts_count": up.attempts_count if up else 0,
     }
 
 
-def _detail(p: Problem, up: Optional[UserProblem]) -> dict:
+def _detail(p: Problem, up: Optional[UserProblem], hints: Optional[list] = None) -> dict:
     return {
         **_list_item(p, up),
         "description": p.description,
         "last_code": up.last_code if up else None,
-        "hints_used": up.hints_used if up else 0,
         "solved_at": _iso(up.solved_at) if up else None,
+        "hints_used": up.hints_used if up else 0,
+        "max_hint_level": MAX_LEVEL,
     }
 
 
@@ -170,7 +186,7 @@ def get_problem(problem_id: int, db: Session = Depends(get_db),
     up = db.query(UserProblem).filter(
         UserProblem.user_id == user_id, UserProblem.problem_id == problem_id
     ).first()
-    return _detail(problem, up)
+    return _detail(problem, up, list_hints(db, user_id, problem.id))
 
 
 @router.post("/problems/{problem_id}/submit")
@@ -251,6 +267,43 @@ def mark_solved(problem_id: int, db: Session = Depends(get_db),
     }
 
 
+@router.post("/problems/{problem_id}/hint")
+def request_hint(problem_id: int, body: Optional[HintRequest] = None, db: Session = Depends(get_db),
+                 user_id: int = Depends(current_user_id)):
+    """
+    Reveal the next hint (level 1 -> 3) for the logged-in user. Only runs when the student asks.
+    Levels unlock in order; a level already unlocked is served from the stored copy (no LLM call).
+    """
+    problem = _problem_or_404(db, problem_id)
+    body = body or HintRequest()
+    try:
+        result = reveal_hint(
+            db, user_id, problem, level=body.level, code=body.code,
+            rate_check=lambda: hint_limiter.check(user_id),
+        )
+    except HintError as e:
+        headers = {"Retry-After": str(e.wait_seconds)} if isinstance(e, HintRateLimited) else None
+        raise HTTPException(status_code=e.status_code, detail=str(e), headers=headers)
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {
+        "problem_id": problem.id,
+        "level": result.level,
+        "hint": result.text,
+        "new": result.is_new,                      # False = it was already unlocked (served from storage)
+        "hints_used": result.hints_used,
+        "max_level": MAX_LEVEL,
+        "next_level": result.next_level,           # None once all hints are unlocked
+        "unlocked": hints_as_dicts(result.unlocked),
+    }
+
+
+@router.get("/problem-stats")
+def problem_stats(db: Session = Depends(get_db), user_id: int = Depends(current_user_id)):
+    """Dashboard numbers: solved / attempted, and how many solved problems needed no hint."""
+    return hint_summary(db, user_id)
+    
 @router.post("/admin/problems", status_code=201, dependencies=[Depends(require_admin)])
 def admin_add_problem(body: CustomProblemIn, db: Session = Depends(get_db)):
     """Add one custom problem. Needs ADMIN_TOKEN on the server and an X-Admin-Token header."""

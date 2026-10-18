@@ -184,6 +184,7 @@ export default function Problems() {
               <th className="px-4 py-3 w-28">Difficulty</th>
               <th className="px-4 py-3">Topics</th>
               <th className="px-4 py-3 w-28 text-right">Acceptance</th>
+              <th className="px-4 py-3 w-20 text-center">Hints</th>
             </tr>
           </thead>
           <tbody>
@@ -208,18 +209,23 @@ export default function Problems() {
                 <td className="px-4 py-3 text-right text-slate-500">
                   {p.acceptance_rate == null ? '—' : `${p.acceptance_rate.toFixed(1)}%`}
                 </td>
+                                <td className="px-4 py-3 text-center text-slate-500">
+                  {p.hints_used > 0 ? (
+                    <span title={`${p.hints_used} of 3 hints used`}>💡 {p.hints_used}</span>
+                  ) : '—'}
+                </td>
               </tr>
             ))}
             {!loading && !error && items.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-12 text-center text-slate-400">
+                <td colSpan={6} className="px-4 py-12 text-center text-slate-400">
                   {hasFilters ? 'No problems match these filters.' : 'No problems yet — run the seed script (see README).'}
                 </td>
               </tr>
             )}
             {loading && !data && (
               <tr>
-                <td colSpan={5} className="px-4 py-12 text-center text-slate-400 animate-pulse">
+                <td colSpan={6} className="px-4 py-12 text-center text-slate-400 animate-pulse">
                   Loading problems…
                 </td>
               </tr>

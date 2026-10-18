@@ -1,7 +1,7 @@
 """create problems and user_problems
 
 Revision ID: 0001_problems
-Revises:
+Revises: 0001_auth_foundation
 Create Date: 2026-10-16
 
 Adds the Problems feature tables. Each table is only created if it is missing:
@@ -12,7 +12,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "0001_problems"
-down_revision = None
+down_revision = "0001_auth_foundation"
 branch_labels = None
 depends_on = None
 

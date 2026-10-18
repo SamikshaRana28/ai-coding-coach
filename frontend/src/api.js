@@ -60,21 +60,20 @@ export const getRecommendations = (data) => api.post('/recommend', data)
 export const getScore = (data) => api.post('/score', data)
 export const getProgress = (userId) => api.get(`/progress/${userId}`)
 
-// Problems
-export const CURRENT_USER_ID = 1
-const userHeaders = { 'X-User-Id': String(CURRENT_USER_ID) }
+// Problems (the logged-in user comes from the JWT that the interceptor above adds)
+export const listProblems = (params) => api.get('/problems', { params })
+export const getProblem = (id) => api.get(`/problems/${id}`)
+export const submitProblem = (id, data) => api.post(`/problems/${id}/submit`, data)
+export const markProblemSolved = (id) => api.post(`/problems/${id}/mark-solved`)
 
-export const listProblems = (params) =>
-  api.get('/problems', { params, headers: userHeaders })
+// Hints (Part 4): POST with no `level` = "give me the next hint"; `code` is the unsaved editor text
+export const requestHint = (id, data = {}) => api.post(`/problems/${id}/hint`, data)
+export const getProblemStats = () => api.get('/problem-stats')
 
-export const getProblem = (id) =>
-  api.get(`/problems/${id}`, { headers: userHeaders })
-
-export const submitProblem = (id, data) =>
-  api.post(`/problems/${id}/submit`, data, { headers: userHeaders })
-
-export const markProblemSolved = (id) =>
-  api.post(`/problems/${id}/mark-solved`, null, { headers: userHeaders })
+// Coach (the conversation is stored on the server, per logged-in user)
+export const coachChat = (data) => api.post('/coach/chat', data)
+export const getCoachHistory = (limit = 50) => api.get('/coach/history', { params: { limit } })
+export const clearCoachHistory = () => api.delete('/coach/history')
 
 // Interview agent
 export const getInterviewTopics = () => api.get('/interview/topics')

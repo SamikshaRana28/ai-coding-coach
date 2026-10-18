@@ -1,14 +1,14 @@
 """create coach_messages table
 
 Revision ID: 0002
-Revises: 0001
+Revises: 0001_problems
 Create Date: 2026-10-16
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "0002"
-down_revision = "0001"
+down_revision = "0001_problems"
 branch_labels = None
 depends_on = None
 

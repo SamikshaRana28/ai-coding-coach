@@ -11,6 +11,9 @@ sys.path.insert(0, str(BACKEND))
 # Never touch a real database from the tests (models.py reads this at import time).
 os.environ["DATABASE_URL"] = "sqlite://"
 os.environ.pop("ADMIN_TOKEN", None)
+# Auth: a long-enough secret, and rate limiting off (test_auth turns it on for one test).
+os.environ["JWT_SECRET"] = "test-secret-for-pytest-only-0123456789abcdef"
+os.environ["RATE_LIMIT_ENABLED"] = "false"
 
 # ml/recommender.py downloads/loads a sentence-transformer at import time. The API
 # tests don't need the real model, so stub it (unless something already imported it).
@@ -59,20 +62,26 @@ class FakeReview:
         )
 
 
-@pytest.fixture()
-def api(monkeypatch):
-    """TestClient on an in-memory SQLite DB with 6 seeded problems and a fake LLM."""
+# ── auth helpers (used by test_auth.py, test_problems.py, test_hints.py) ─────
+def auth_header(token: str) -> dict:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def signup(client, email="alice@example.com", password="correct-horse-1", name="Alice Smith"):
+    """POST /auth/signup and return the raw response."""
+    return client.post("/auth/signup", json={"email": email, "password": password, "name": name})
+
+
+def _build_env(monkeypatch):
+    """In-memory SQLite shared by the app (via dependency override) and the test's own sessions."""
     from types import SimpleNamespace
 
-    from fastapi.testclient import TestClient
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy.pool import StaticPool
 
     import main
     import models
-    from routers import problems as problems_router
-    from scripts.seed_problems import seed
 
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     models.Base.metadata.create_all(engine)
@@ -86,14 +95,107 @@ def api(monkeypatch):
             db.close()
 
     main.app.dependency_overrides[models.get_db] = override_get_db
+    return SimpleNamespace(main=main, Session=Session)
+
+
+def _register(client, email, name="Test User", password="correct-horse-1"):
+    """Sign a user up through the real endpoint -> (user_dict, auth headers)."""
+    resp = signup(client, email=email, password=password, name=name)
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    return body["user"], auth_header(body["access_token"])
+
+
+@pytest.fixture()
+def main_module():
+    """The module that owns the Groq `client` (analysis.py; /analyze calls it through run_analysis)."""
+    import analysis
+    return analysis
+
+
+def _reset_real_db():
+    """Empty, freshly-created tables on the app's real engine (SQLite in memory in tests)."""
+    import models
+
+    models.Base.metadata.drop_all(models.engine)
+    models.Base.metadata.create_all(models.engine)
+
+
+@pytest.fixture()
+def client():
+    """
+    TestClient on the app's real engine/SessionLocal (no dependency override), with clean tables.
+    Shared by test_auth.py and test_interview.py; those tests also open models.SessionLocal()
+    themselves, so the app and the tests must see the same database.
+    """
+    from fastapi.testclient import TestClient
+
+    import main
+
+    main.app.dependency_overrides.clear()
+    _reset_real_db()
+    yield TestClient(main.app)
+    _reset_real_db()
+
+
+@pytest.fixture()
+def db(client):
+    """A session on the same database the `client` fixture uses."""
+    import models
+
+    session = models.SessionLocal()
+    yield session
+    session.close()
+
+
+@pytest.fixture()
+def make_user(client):
+    """make_user(email, name, password) -> (user_dict, auth_headers). Signs up via the API."""
+    counter = {"n": 0}
+
+    def _make(email=None, name="Test User", password="correct-horse-1"):
+        counter["n"] += 1
+        return _register(client, email or f"user{counter['n']}@example.com", name, password)
+
+    return _make
+
+
+@pytest.fixture()
+def api(monkeypatch):
+    """
+    TestClient on an in-memory SQLite DB with 6 seeded problems and a fake LLM.
+
+    Two real users are created through /auth/signup (ids 1 and 2):
+      * api.client sends user 1's JWT by default,
+      * api.h1 / api.h2 are the Authorization headers of user 1 / user 2
+        (pass headers=api.h2 to act as the second user).
+    """
+    from types import SimpleNamespace
+
+    from fastapi.testclient import TestClient
+
+    from routers import problems as problems_router
+    from scripts.seed_problems import seed
+
+    env = _build_env(monkeypatch)
+    main = env.main
 
     fake = FakeReview()
     monkeypatch.setattr(problems_router, "run_analysis", fake)
     monkeypatch.setattr(main, "run_analysis", fake)
 
-    db = Session()
+    # fresh hint rate limiter per test (it is per user id in memory, and every test reuses ids 1 and 2)
+    from coach_router import RateLimiter
+    monkeypatch.setattr(problems_router, "hint_limiter", RateLimiter(1000))
+
+    db = env.Session()
     seed(db, [dict(r) for r in SEED_ROWS])
     db.close()
 
-    yield SimpleNamespace(client=TestClient(main.app), Session=Session, llm=fake, main=main)
+    test_client = TestClient(main.app)
+    _, h1 = _register(test_client, "one@example.com", "User One")
+    _, h2 = _register(test_client, "two@example.com", "User Two")
+    test_client.headers.update(h1)       # default identity = user 1
+
+    yield SimpleNamespace(client=test_client, Session=env.Session, llm=fake, main=main, h1=h1, h2=h2)
     main.app.dependency_overrides.clear()

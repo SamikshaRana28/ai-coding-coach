@@ -116,7 +116,7 @@ def _problem_context(db: Session, user_id: int, problem_id: int, code: Optional[
     )
     snippet = code if code else (up.last_code if up and up.last_code else "")
     lines = [
-        f"The student is currently on this problem: {p.title} ({p.difficulty}; topics: {', '.join(p.topics or [])})",
+        f"The student is currently on this problem: {p.title} (problem id {p.id}; {p.difficulty}; topics: {', '.join(p.topics or [])})",
         f"Problem statement: {(p.description or '')[:1500]}",
         f"Student's status: {up.status if up else 'todo'}; attempts: {up.attempts_count if up else 0}; hints used: {up.hints_used if up else 0}",
         f"Student's current code:\n{snippet[:2000]}" if snippet else "Student has not written any code yet.",
