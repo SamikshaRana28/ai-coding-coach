@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import Editor from '@monaco-editor/react'
 import {
@@ -7,7 +7,7 @@ import {
 import { DifficultyBadge, StatusIcon, TopicChips, STATUS_LABELS } from '../components/ProblemBits'
 import ReviewPanel from '../components/ReviewPanel'
 import HintPanel from '../components/HintPanel'
-import CoachWidget from '../components/CoachWidget'
+import { useCoach } from '../components/coachContext'
 
 const LANGUAGES = [
   { value: 'python', label: 'Python' },
@@ -58,7 +58,9 @@ export default function ProblemPage() {
   const [hintsOpen, setHintsOpen] = useState(false)
   const [stuck, setStuck] = useState({ show: false, dismissed: false })
   const [submitCount, setSubmitCount] = useState(0)    // restarts the stuck timer after each submit
-  const [coachOpen, setCoachOpen] = useState(false)
+  const { open: coachOpen, openCoach, registerContext } = useCoach()   // the one Coach lives in the app shell
+  const codeRef = useRef('')
+  const replyRef = useRef(null)
   // Load the problem (and the student's last code) whenever the URL id changes.
   useEffect(() => {
     let cancelled = false
@@ -141,6 +143,21 @@ export default function ProblemPage() {
       setHintsOpen(true)
     } catch { /* the hints show up the next time the page loads */ }
   }
+    // Keep the latest editor text / reply handler where the Coach can read them without re-registering.
+  useEffect(() => { codeRef.current = code }, [code])
+  useEffect(() => { replyRef.current = handleCoachReply })
+
+  // While this page is open the Coach knows which problem it is and sees the code in the editor.
+  const coachProblemId = problem?.id
+  const coachProblemTitle = problem?.title
+  useEffect(() => {
+    if (!coachProblemId) return undefined
+    return registerContext({
+      problem: { id: coachProblemId, title: coachProblemTitle },
+      getCode: () => codeRef.current,
+      onReply: (reply) => replyRef.current?.(reply),
+    })
+  }, [coachProblemId, coachProblemTitle, registerContext])
   const onLanguageChange = (next) => {
     // swap the starter template only if the student hasn't written anything
     setCode((prev) => (isStarter(prev) ? STARTERS[next] : prev))
@@ -229,8 +246,7 @@ export default function ProblemPage() {
             
             <button
               type="button"
-              onClick={() => setCoachOpen(true)}
-              className="text-sm text-blue-700 border border-blue-200 bg-blue-50 px-3 py-2 rounded-lg hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              onClick={openCoach}              className="text-sm text-blue-700 border border-blue-200 bg-blue-50 px-3 py-2 rounded-lg hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             >
               💬 Ask Coach about this problem
             </button>
@@ -384,14 +400,6 @@ export default function ProblemPage() {
           )}
         </div>
       </div>
-      
-      <CoachWidget
-        open={coachOpen}
-        onClose={() => setCoachOpen(false)}
-        problem={{ id: problem.id, title: problem.title }}
-        getCode={() => code}
-        onReply={handleCoachReply}
-      />
     </div>
     
   )

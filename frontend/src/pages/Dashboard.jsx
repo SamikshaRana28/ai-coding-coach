@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { api, getScore, predictWeakTopic, getProblemStats } from '../api'
 import { useAuth } from '../auth/useAuth'
+import TodayCard from '../components/TodayCard'
+import FocusCard from '../components/FocusCard'
 
 const defaultStats = {
   arrays_solved: 25, graphs_solved: 10, dp_solved: 8,
@@ -84,6 +86,11 @@ export default function Dashboard() {
           Your interview readiness at a glance
           {fromHistory && ' — loaded from your solved problems (edit the numbers to experiment)'}
         </p>
+        </div>
+
+      <div className="grid md:grid-cols-3 gap-6">
+        <div className="md:col-span-2"><TodayCard /></div>
+        <FocusCard />
       </div>
 
       <div className="grid md:grid-cols-3 gap-6">

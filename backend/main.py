@@ -14,6 +14,8 @@ from coach_router import router as coach_router
 from analysis import AnalyzeResponse, run_analysis, record_attempt
 from problems_service import attach_problem_ids
 from routers.problems import router as problems_router
+from routers.plan import router as plan_router
+from routers.followups import router as followups_router
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 # from auth import router as auth_router, limiter
@@ -39,6 +41,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(plan_router)
+app.include_router(followups_router)
 app.include_router(problems_router)
 app.include_router(coach_router)
 app.state.limiter = limiter

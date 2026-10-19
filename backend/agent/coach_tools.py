@@ -18,7 +18,7 @@ from sqlalchemy import String, and_, cast, func, or_
 from sqlalchemy.orm import Session
 
 # ADAPT: these class names must match your Part 2 models (problems / user_problems tables)
-from models import Attempt, Problem, UserProblem
+from models import Attempt, Problem, User, UserProblem
 from user_stats import CORE_TOPICS, STAT_KEYS, build_user_stats, topic_stats
 
 APP_TOPICS = ["arrays", "dp", "graphs", "trees", "strings", "math", "others"]   # the app's topic names
@@ -110,7 +110,24 @@ class GetProblemArgs(Args):
 
 
 # ── tool functions (each returns a small JSON-able dict) ────────────────────
+class CreatePlanArgs(Args):
+    goal: Optional[str] = Field(None, max_length=200, description="What the student wants, e.g. 'interview in 4 weeks'")
+    minutes_per_day: Optional[int] = Field(None, ge=10, le=480, description="Study time per day; 30 or less gives a lighter plan")
+    focus_topic: Optional[str] = Field(None, description=f"Put this topic first, one of {APP_TOPICS}")
 
+    @field_validator("focus_topic")
+    @classmethod
+    def _focus(cls, v):
+        if v is None:
+            return v
+        v = v.strip().lower()
+        if v not in APP_TOPICS:
+            raise ValueError(f"focus_topic must be one of {APP_TOPICS}")
+        return v
+
+
+class CompleteTaskArgs(Args):
+    task_id: int = Field(ge=1, description="Id of one of the student's daily tasks (from get_daily_tasks or get_study_plan)")
 
 class GetHintArgs(Args):
     # No `level` argument on purpose: the server always gives the NEXT level (1 -> 3), exactly like
@@ -279,7 +296,80 @@ def t_get_hint(ctx: ToolContext, args: GetHintArgs) -> dict:
         "hints_used": r.hints_used,
         "note": note,
     }
+# ── Part 5: study plan, daily tasks, streak ─────────────────────────────────
+def _me(ctx: ToolContext):
+    return ctx.db.get(User, ctx.user_id)
 
+
+def _compact_plan(plan: dict) -> dict:
+    """The plan in few tokens: no timestamps, titles + ids only."""
+    return {
+        "plan_id": plan["id"],
+        "week": f"{plan['week_start']} to {plan['week_end']}",
+        "summary": plan["summary"],
+        "focus_topics": [{"topic": f["topic"], "reason": f["reason"]} for f in plan["focus_topics"]],
+        "progress": plan["progress"],
+        "days": [
+            {"date": d["date"], "today": d["is_today"],
+             "tasks": [{"id": t["id"], "kind": t["kind"], "title": t["title"], "status": t["status"]} for t in d["tasks"]]}
+            for d in plan["days"]
+        ],
+    }
+
+
+def t_get_study_plan(ctx: ToolContext, args: NoArgs) -> dict:
+    import plans
+
+    plan = plans.get_active_plan(ctx.db, ctx.user_id)
+    if plan is None:
+        return {"plan": None, "note": "The student has no study plan yet. Offer to create one with create_study_plan."}
+    return _compact_plan(plans.plan_dict(ctx.db, _me(ctx), plan))
+
+
+def t_create_study_plan(ctx: ToolContext, args: CreatePlanArgs) -> dict:
+    """Same code path as the 'Generate plan' button (agent/planner.create_plan). Replaces the current plan."""
+    from agent import planner
+
+    try:
+        plan = planner.create_plan(ctx.db, _me(ctx), goal=args.goal, minutes_per_day=args.minutes_per_day,
+                                   focus_topic=args.focus_topic)
+    except planner.PlanError as e:
+        return {"error": str(e)}
+    import plans
+
+    return {**_compact_plan(plans.plan_dict(ctx.db, _me(ctx), plan)), "note": "The previous plan was archived."}
+
+
+def t_get_daily_tasks(ctx: ToolContext, args: NoArgs) -> dict:
+    import plans
+
+    info = plans.today_tasks(ctx.db, _me(ctx))
+    if not info["has_plan"]:
+        return {"date": info["date"], "tasks": [], "note": "No study plan yet. Offer to create one."}
+    return {"date": info["date"], "progress": info["progress"],
+            "tasks": [{"id": t["id"], "kind": t["kind"], "title": t["title"], "status": t["status"]} for t in info["tasks"]]}
+
+
+def t_complete_task(ctx: ToolContext, args: CompleteTaskArgs) -> dict:
+    import plans
+    import streaks
+
+    user = _me(ctx)
+    task = plans.get_task(ctx.db, ctx.user_id, args.task_id)       # only THIS student's tasks
+    if task is None:
+        return {"error": f"No task with id {args.task_id}"}
+    changed = plans.complete_task(ctx.db, user, task)
+    ctx.db.commit()
+    sm = streaks.streak_summary(ctx.db, user)
+    return {"task": task.title, "status": task.status, "newly_completed": changed,
+            "current_streak": sm["current_streak"], "longest_streak": sm["longest_streak"]}
+
+
+def t_get_streak(ctx: ToolContext, args: NoArgs) -> dict:
+    import streaks
+
+    sm = streaks.streak_summary(ctx.db, _me(ctx))
+    return {k: sm[k] for k in ("current_streak", "longest_streak", "active_today", "last_active_date")}
 # ── registry ────────────────────────────────────────────────────────────────
 @dataclass
 class Tool:

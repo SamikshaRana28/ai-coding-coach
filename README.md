@@ -354,6 +354,28 @@ Every per-user endpoint takes the user from the JWT (`Authorization: Bearer <tok
 | `/attempts/{user_id}` | GET | Attempt history |
 | `/dataset-stats` | GET | Real LeetCode user data stats |
 
+### Study plan, tasks, streak (Part 5)
+| Endpoint | Method | Description |
+|---|---|---|
+| `/plan/generate` | POST | Build a 7-day plan from your real data. Body (all optional): `goal`, `minutes_per_day`, `focus_topic`. Archives the previous plan |
+| `/plan/current` | GET | Active plan (`{"plan": null}` if none) with 7 days, tasks, progress, focus topics |
+| `/plan/focus` | GET | Weak topics + patterns to study, `low_data` flag and an honest note |
+| `/tasks/today` | GET | Today's tasks (your timezone) |
+| `/tasks/{id}/complete`, `/tasks/{id}/skip` | POST | Tick / skip a task (complete is idempotent). Solving the linked problem completes it automatically |
+| `/tasks/reschedule` | POST | Move unfinished tasks of earlier days to today |
+| `/streak` | GET | Current / longest streak + the last 7 days |
+
+### Follow-ups (Part 6)
+| Endpoint | Method | Description |
+|---|---|---|
+| `/coach/checkin/today` | GET | What the Coach should say now (morning / missed yesterday / evening / weekly review), from real data |
+| `/coach/checkin` | POST | Save today's check-in `{mood 1-5, note}`; may suggest a lighter plan |
+| `/plan/weekly-review` | GET / POST / DELETE | Read / start / discard the weekly review (POST proposes next week, nothing is replaced yet) |
+| `/plan/weekly-review/confirm` | POST | Make the proposed plan the active one |
+| `/notifications`, `/notifications/read` | GET / POST | In-app notifications (unread count drives the dot on the Coach button) |
+| `/settings` | GET / PUT | `notify_email` on/off |
+| `/internal/cron/daily-nudges?slot=morning\|evening` | POST | Cron hook, needs header `X-Cron-Secret` (503 while `CRON_SECRET` is unset, 403 if wrong) |
+
 ### Coach and interviewer
 | Endpoint | Method | Description |
 |---|---|---|
@@ -404,7 +426,14 @@ The **Hint** button unlocks one level per click, in order:
 
 ## Coach
 
-A chat panel on the problem page ("Ask Coach about this problem"). The conversation is stored on the server per user. The Coach uses tools (`get_topic_stats`, `get_attempts`, `get_readiness_score`, `predict_weak_topic`, `get_similar_questions`, `predict_difficulty`, `search_problems`, `get_problem`, `get_hint`) and never receives a `user_id` argument: the server injects the logged-in user's id.
+A chat panel on the problem page ("Ask Coach about this problem"). The conversation is stored on the server per user. The Coach uses tools (`get_topic_stats`, `get_attempts`, `get_readiness_score`, `predict_weak_topic`, `get_similar_questions`, `predict_difficulty`, `search_problems`, `get_problem`, `get_hint`, `get_study_plan`, `create_study_plan`, `get_daily_tasks`, `complete_task`, `get_streak`) and never receives a `user_id` argument: the server injects the logged-in user's id.
+
+## Study plan, streak and follow-ups
+
+- **Plan** (`agent/planner.py`): built from your stats, weak-topic model, hints and recent attempts. Rules: 7 days, 2-3 tasks a day, only real problems from the `problems` table, about 60% on weak topics / 30% mixed / 10% revision of problems you solved with hints or got wrong, difficulty ramps Easy to Medium (Hard only in a topic you are strong in). The LLM may arrange the plan, but its JSON is validated (ids checked against the database); if it is down or breaks a rule, the rule-based plan is used. The plan starts today and runs 7 days. A new plan archives the old one. "Generate plan" and the Coach's `create_study_plan` use the same function.
+- **Streak** (`streaks.py`): a day counts when you complete a task or solve a problem on that calendar day in your timezone (`users.timezone`, default `Asia/Kolkata`). Same-day repeats count once; a missed day resets it; the longest streak is kept.
+- **Check-ins** are computed when you open the app (they work even if the free host was asleep). **Weekly review** proposes next week's plan and only replaces the current one after you confirm.
+- **Nudges**: `.github/workflows/nudges.yml` calls `/internal/cron/daily-nudges` twice a day. It creates in-app notifications and, only for users who turned it on in Settings and only if an email provider is configured, sends an email. With no email setup it still works (in-app only).
 
 ## ML models
 
@@ -427,9 +456,12 @@ ai-coding-coach/
 │   ├── interview_router.py     # /interview/* endpoints
 │   ├── problems_service.py, problem_utils.py, user_stats.py
 │   ├── routers/problems.py     # /problems*, /problem-stats, /admin/problems
-│   ├── agent/                  # coach.py (agent loop), coach_tools.py (tools), tools.py
+│   ├── routers/plan.py         # /plan/*, /tasks/*, /streak (Part 5)
+│   ├── routers/followups.py    # check-in, weekly review, notifications, settings, cron (Part 6)
+│   ├── plans.py, streaks.py, clock.py, followups.py, emailer.py, hints.py
+│   ├── agent/                  # coach.py (agent loop), coach_tools.py (tools), planner.py (study plan), tools.py
 │   ├── ml/                     # training, predict, recommender, score, progress
-│   ├── alembic/versions/       # 0001_auth_foundation → 0001_problems → 0002 → 0003
+│   ├── alembic/versions/       # 0001_auth_foundation → 0001_problems → 0002 → 0003 → 0004 → 0005
 │   ├── scripts/                # seed_problems.py, add_problem.py
 │   └── tests/                  # conftest.py, test_problems.py, test_hints.py, test_auth.py, ...
 ├── data/
@@ -454,7 +486,7 @@ cd backend
 python3.12 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env            # then edit: GROQ_API_KEY, JWT_SECRET, DATABASE_URL
-alembic upgrade head            # users, problems, user_problems, coach_messages, hint_events
+alembic upgrade head            # users, problems, user_problems, coach_messages, hint_events, study_plans, daily_tasks, user_streaks, checkins, notifications
 python -m scripts.seed_problems # 500 questions, safe to re-run
 uvicorn main:app --reload --port 8000
 
@@ -489,6 +521,8 @@ docker-compose exec backend python -m scripts.seed_problems   # first run only
 | `TRUSTED_PROXY_HOPS` | Reverse proxies in front of the app |
 | `ADMIN_TOKEN` | Enables `/admin/problems` |
 | `DEMO_EMAIL`, `DEMO_NAME`, `DEMO_PASSWORD` | Used by `seed_demo_user.py` |
+| `CRON_SECRET` | Protects `/internal/cron/daily-nudges` (the endpoint is disabled until it is set) |
+| `EMAIL_FROM` + `RESEND_API_KEY` (or `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`) | Optional reminder emails. Leave empty for in-app notifications only |
 
 Never commit `.env` or paste it anywhere. If a key leaks, rotate it.
 
@@ -515,6 +549,14 @@ Set these in the hosting dashboards, not in git:
 4. Existing users keep working only if their accounts live in the same database. Old tokens signed with a different `JWT_SECRET` are rejected, so users must log in again.
 5. Redeploy the frontend, since `api.js` no longer sends `X-User-Id` and calls the new hint/coach endpoints.
 
+**After deploying the plan / follow-ups update (Part 5 + 6):**
+
+1. Run `alembic upgrade head` (creates `study_plans`, `daily_tasks`, `user_streaks`, `checkins`, `notifications` and adds `users.notify_email`). The migrations are additive and safe to re-run. As a safety net the app also adds `users.notify_email` itself at startup if it is missing, so a forgotten migration cannot break login.
+2. `tzdata` is now in `requirements.txt` (timezone database for slim images); redeploy the backend so it is installed.
+3. For the scheduled nudges: set `CRON_SECRET` on the backend, then in GitHub (Settings, Secrets and variables, Actions) add `CRON_SECRET` (same value) and `API_BASE_URL` (your backend URL, no trailing slash). Test it once with the workflow's "Run workflow" button.
+4. Emails are optional: add `EMAIL_FROM` and `RESEND_API_KEY` (or SMTP settings) only if you want them.
+5. Redeploy the frontend (new Plan and Settings pages, Coach button on every page).
+
 Free hosting tiers can sleep when idle, so the first request after a pause may be slow or fail. The frontend shows "Could not reach the server" in that case; retry after a few seconds.
 
 ## Testing
@@ -524,7 +566,7 @@ cd backend
 pytest -v
 ```
 
-Tests use in-memory SQLite and a fake LLM. They cover scoring and prediction, problem topic mapping, seeding, list filters, submit/mark-solved rules, the admin endpoint, JWT access control (401 without a token, `X-User-Id` ignored), and the hint service.
+Tests use in-memory SQLite and a fake LLM. They cover scoring and prediction, problem topic mapping, seeding, list filters, submit/mark-solved rules, the admin endpoint, JWT access control (401 without a token, `X-User-Id` ignored), the hint service, the study plan (validation, ratios, streak rules with mocked dates and timezones, Coach tools) and the follow-ups (check-in messages, weekly review, notifications, cron secret and idempotency, email provider failures).
 
 ## Limitations and future work
 

@@ -1,0 +1,50 @@
+name: Daily nudges
+
+# Calls the backend twice a day so students get a morning reminder and an evening streak-save reminder.
+# Free hosting sleeps when idle, so this runs from GitHub (an external cron) instead of inside the app.
+#
+# One-time setup: GitHub repo -> Settings -> Secrets and variables -> Actions -> New repository secret
+#   API_BASE_URL  e.g. https://your-backend.onrender.com   (no trailing slash)
+#   CRON_SECRET   the same value as CRON_SECRET in the backend's environment
+#
+# Times are UTC. India (IST = UTC+5:30): 02:30 UTC = 08:00 IST, 15:00 UTC = 20:30 IST.
+# GitHub may start scheduled runs a few minutes late; that is fine for reminders.
+on:
+  schedule:
+    - cron: "30 2 * * *"     # morning, 08:00 IST
+    - cron: "0 15 * * *"     # evening, 20:30 IST
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: "morning or evening"
+        required: true
+        default: "morning"
+
+jobs:
+  nudge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the daily-nudges endpoint
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+          INPUT_SLOT: ${{ github.event.inputs.slot }}
+        run: |
+          if [ -z "$API_BASE_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "API_BASE_URL and CRON_SECRET repository secrets are not set. Nothing to do."
+            exit 0
+          fi
+          if [ -n "$INPUT_SLOT" ]; then
+            SLOT="$INPUT_SLOT"
+          elif [ "$EVENT_SCHEDULE" = "30 2 * * *" ]; then
+            SLOT=morning
+          else
+            SLOT=evening
+          fi
+          echo "Slot: $SLOT"
+          # --retry covers a sleeping free-tier server that needs a minute to wake up
+          curl --fail-with-body --silent --show-error \
+               --max-time 120 --retry 3 --retry-delay 20 --retry-all-errors \
+               -X POST -H "X-Cron-Secret: $CRON_SECRET" \
+               "$API_BASE_URL/internal/cron/daily-nudges?slot=$SLOT"

@@ -187,6 +187,9 @@ def api(monkeypatch):
     # fresh hint rate limiter per test (it is per user id in memory, and every test reuses ids 1 and 2)
     from coach_router import RateLimiter
     monkeypatch.setattr(problems_router, "hint_limiter", RateLimiter(1000))
+    from routers import followups as followups_router, plan as plan_router
+    monkeypatch.setattr(plan_router, "plan_limiter", RateLimiter(1000))
+    monkeypatch.setattr(followups_router, "review_limiter", RateLimiter(1000))
 
     db = env.Session()
     seed(db, [dict(r) for r in SEED_ROWS])
@@ -199,3 +202,55 @@ def api(monkeypatch):
 
     yield SimpleNamespace(client=test_client, Session=env.Session, llm=fake, main=main, h1=h1, h2=h2)
     main.app.dependency_overrides.clear()
+# ── Part 5/6 helpers ──────────────────────────────────────────────────────────
+class ClockControl:
+    """Freezes clock.utcnow(). Default: Monday 2026-10-19 04:00 UTC = 09:30 in Asia/Kolkata (morning)."""
+
+    def __init__(self):
+        from datetime import datetime
+        self.value = datetime(2026, 10, 19, 4, 0)
+
+    def set(self, year, month, day, hour=4, minute=0):
+        from datetime import datetime
+        self.value = datetime(year, month, day, hour, minute)
+
+    def advance(self, **kwargs):
+        from datetime import timedelta
+        self.value += timedelta(**kwargs)
+
+
+@pytest.fixture()
+def ctl(monkeypatch):
+    import clock
+
+    control = ClockControl()
+    monkeypatch.setattr(clock, "utcnow", lambda: control.value)
+    return control
+
+
+def seed_bank(api, per_topic=12):
+    """A realistic question bank: `per_topic` problems for each of the 7 app topics (Easy/Medium/Hard mix)."""
+    from scripts.seed_problems import seed
+
+    diffs = ["Easy", "Easy", "Easy", "Medium", "Medium", "Medium", "Medium", "Hard", "Easy", "Medium", "Medium", "Hard"]
+    rows = []
+    for topic in ["arrays", "dp", "graphs", "trees", "strings", "math", "others"]:
+        for i in range(per_topic):
+            rows.append({"title": f"{topic.title()} Problem {i + 1}", "slug": f"bank-{topic}-{i + 1}",
+                         "difficulty": diffs[i % len(diffs)], "topics": [topic],
+                         "description": f"Practice problem {i + 1} about {topic}.", "url": None,
+                         "acceptance_rate": 30.0 + i * 3})
+    db = api.Session()
+    seed(db, rows)
+    db.close()
+
+
+def give_stats(api, user_id, **per_topic):
+    """TopicProgress rows: give_stats(api, 1, arrays=(20, 22), graphs=(1, 6)) = (solved, attempts)."""
+    from models import TopicProgress
+
+    db = api.Session()
+    for topic, (solved, attempts) in per_topic.items():
+        db.add(TopicProgress(user_id=user_id, topic=topic, count=solved, total_attempts=attempts))
+    db.commit()
+    db.close()

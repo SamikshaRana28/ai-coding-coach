@@ -12,12 +12,13 @@ from sqlalchemy.orm import Session
 
 from agent.coach import CoachResult, build_user_message, get_client, run_coach
 from agent.coach_tools import ToolContext
-from models import CoachMessage, Problem, UserProblem, get_db
+from models import CoachMessage, Problem, User, UserProblem, get_db
 
 # CHANGE THIS ONE LINE: import the dependency from your Part 1 auth that returns the
 # logged-in user's id. current_user.py is only a placeholder (reads an X-User-Id header).
 # from current_user import get_user_id
 
+import followups
 from auth import get_current_user
 
 
@@ -164,6 +165,10 @@ def chat(
         )
 
     context = _problem_context(db, user_id, body.problem_id, body.code) if body.problem_id else None
+     me = db.get(User, user_id)
+    checkin_line = followups.checkin_context(db, me) if me is not None else None     # Part 6: today's check-in
+    if checkin_line:
+        context = f"{context}\n{checkin_line}" if context else checkin_line
     history = [{"role": r.role, "content": r.content}
                for r in _load_history(db, user_id, HISTORY_CONTEXT_MESSAGES)]
 

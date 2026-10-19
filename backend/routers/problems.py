@@ -20,6 +20,8 @@ from sqlalchemy.orm import Session, defer
 from analysis import bugs_clean, record_attempt, run_analysis
 from auth import get_current_user
 from coach_router import RateLimiter
+import clock
+import plans
 from hints import (
     MAX_LEVEL, HintError, HintRateLimited, hint_summary, hints_as_dicts, list_hints, reveal_hint,
 )
@@ -223,9 +225,11 @@ def submit_problem(problem_id: int, body: SubmitRequest, db: Session = Depends(g
         up.attempts_count = (up.attempts_count or 0) + 1
         if newly_solved:
             up.status = "solved"
-            up.solved_at = datetime.utcnow()
+            up.solved_at = clock.utcnow()
         elif not was_solved:
-            up.status = "attempted"                  # solved never goes back down
+            up.status = "attempted"   
+            # Part 5: tick the matching plan task and count the day for the streak (same transaction)
+        tasks_completed = plans.on_problem_activity(db, user_id, problem.id, clean=clean, newly_solved=newly_solved)               # solved never goes back down
         db.commit()
     except SQLAlchemyError as e:
         db.rollback()
@@ -237,7 +241,8 @@ def submit_problem(problem_id: int, body: SubmitRequest, db: Session = Depends(g
         "attempts_count": up.attempts_count,
         "hints_used": up.hints_used,
         "clean": clean,                  # this submission's review found no bugs
-        "newly_solved": newly_solved,    # ...and it flipped the problem to solved
+        "newly_solved": newly_solved,  
+        "tasks_completed": tasks_completed,   # plan tasks this submission ticked off (Part 5)  # ...and it flipped the problem to solved
     }
 
 
@@ -251,8 +256,9 @@ def mark_solved(problem_id: int, db: Session = Depends(get_db),
         newly_solved = up.status != "solved"
         if newly_solved:
             up.status = "solved"
-            up.solved_at = datetime.utcnow()
+            up.solved_at = clock.utcnow()
             record_manual_solve(db, user_id, problem)
+            plans.on_problem_activity(db, user_id, problem.id, clean=True, newly_solved=newly_solved)
         db.commit()
     except SQLAlchemyError as e:
         db.rollback()

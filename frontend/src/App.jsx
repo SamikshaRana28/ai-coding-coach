@@ -12,6 +12,9 @@ import SimilarQuestions from './pages/SimilarQuestions'
 import TopicTracker from './pages/TopicTracker'
 import Progress from './pages/Progress'
 import Interview from './pages/Interview'
+import Plan from './pages/Plan'
+import Settings from './pages/Settings'
+import CoachProvider from './components/CoachProvider'
 
 const navItems = [
   { to: '/', label: 'Model Evaluation' },
@@ -19,9 +22,11 @@ const navItems = [
   { to: '/analyzer', label: 'Code Analyzer' },
   { to: '/interview', label: 'Mock Interview' },
   { to: '/dashboard', label: 'Dashboard' },
+  { to: '/plan', label: 'Plan' },
   { to: '/similar', label: 'Similar Questions' },
   { to: '/topics', label: 'Topic Tracker' },
   { to: '/progress', label: 'Progress' },
+  { to: '/settings', label: 'Settings' },
 ]
 
 // Navbar + page container. Sirf logged-in pages is ke andar aate hain.
@@ -52,9 +57,11 @@ function Shell() {
           )}
         </div>
       </nav>
-      <main className="p-6 max-w-6xl mx-auto">
-        <Outlet />
-      </main>
+      <CoachProvider>
+        <main className="p-6 max-w-6xl mx-auto">
+          <Outlet />
+        </main>
+      </CoachProvider>
     </div>
   )
 }
@@ -78,6 +85,8 @@ function App() {
           <Route path="/similar" element={<SimilarQuestions />} />
           <Route path="/topics" element={<TopicTracker />} />
           <Route path="/progress" element={<Progress />} />
+          <Route path="/plan" element={<Plan />} />
+          <Route path="/settings" element={<Settings />} />
         </Route>
       </Route>
     </Routes>

@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, JSON, ForeignKey
+from sqlalchemy import create_engine, inspect, text, Column, Integer, String, Float, DateTime, Date, Boolean, Text, JSON, ForeignKey, false
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -82,7 +82,8 @@ class User(Base):
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
     timezone = Column(String, nullable=True, default="Asia/Kolkata", server_default="Asia/Kolkata")
-
+ # Part 6: opt-in for reminder emails (off unless the student turns it on in Settings)
+    notify_email = Column(Boolean, nullable=False, default=False, server_default=false())
 # Attempt table - har baar user code submit kare
 class Attempt(Base):
     __tablename__ = "attempts"
@@ -200,10 +201,96 @@ class CoachMessage(Base):
     content = Column(Text, nullable=False, default="")
     tool_calls = Column(JSON, nullable=True)     # tool requests / tool info / tools_used (see coach_router)
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+# ── Part 5: study plan, daily tasks, streak ───────────────────────────────────
+class StudyPlan(Base):
+    __tablename__ = "study_plans"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    week_start = Column(Date, nullable=False)           # first day of the 7-day plan (user's local date)
+    status = Column(String, nullable=False, default="active")   # active / archived / proposed (weekly review, not confirmed yet)
+    summary = Column(Text, nullable=True)
+    focus_topics = Column(JSON, nullable=True)          # [{topic, reason, patterns: [...]}]
+    goal = Column(Text, nullable=True)                  # what the student asked for ("interview in 4 weeks")
+    minutes_per_day = Column(Integer, nullable=True)
+    source = Column(String, nullable=True)              # "llm" or "rules": who arranged the tasks
+    review = Column(JSON, nullable=True)                # weekly-review numbers, only on proposed plans
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class DailyTask(Base):
+    __tablename__ = "daily_tasks"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    plan_id = Column(Integer, ForeignKey("study_plans.id", ondelete="CASCADE"), nullable=False, index=True)
+    date = Column(Date, nullable=False)                 # the student's local calendar day
+    kind = Column(String, nullable=False)               # problem / revise / concept
+    problem_id = Column(Integer, ForeignKey("problems.id", ondelete="SET NULL"), nullable=True)
+    title = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="pending")  # pending / done / skipped
+    completed_at = Column(DateTime, nullable=True)      # naive UTC
+
+
+class UserStreak(Base):
+    __tablename__ = "user_streaks"
+    user_id = Column(Integer, primary_key=True)
+    current_streak = Column(Integer, nullable=False, default=0)
+    longest_streak = Column(Integer, nullable=False, default=0)
+    last_active_date = Column(Date, nullable=True)      # last local day with a completed task / solved problem
+
+
+# ── Part 6: check-ins and notifications ───────────────────────────────────────
+class CheckIn(Base):
+    __tablename__ = "checkins"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    date = Column(Date, nullable=False)                 # local day; one check-in per user per day
+    mood = Column(Integer, nullable=True)               # 1 (bad) .. 5 (great)
+    note = Column(Text, nullable=True)
+    tasks_done = Column(Integer, nullable=False, default=0)
+    tasks_total = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("user_id", "date", name="uq_checkins_user_date"),)
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    type = Column(String, nullable=False)               # nudge / checkin / weekly_review
+    message = Column(Text, nullable=False)
+    read = Column(Boolean, nullable=False, default=False, server_default=false())
+    dedupe_key = Column(String, nullable=True)          # e.g. "morning:2026-10-19": a cron retry never doubles a nudge
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("user_id", "dedupe_key", name="uq_notifications_user_dedupe"),)
+
+
+# Columns that were added to EXISTING tables after the first release. create_all() only creates
+# missing tables, never missing columns, so without this a database that has not run
+# `alembic upgrade head` yet would crash on every login. Idempotent and additive only.
+_ADDED_COLUMNS = [
+    ("users", "notify_email", "BOOLEAN NOT NULL DEFAULT false"),
+]
+
+
+def ensure_columns(bind=None):
+    bind = bind or engine
+    insp = inspect(bind)
+    for table, column, ddl in _ADDED_COLUMNS:
+        if not insp.has_table(table):
+            continue
+        if column in {c["name"] for c in insp.get_columns(table)}:
+            continue
+        default = "0" if bind.dialect.name == "sqlite" else None
+        statement = f'ALTER TABLE {table} ADD COLUMN {column} ' + (
+            ddl.replace("false", default) if default else ddl)
+        with bind.begin() as conn:
+            conn.execute(text(statement))
 # Tables banao database mein
 def create_tables():
     Base.metadata.create_all(engine)
+    ensure_columns(engine)
 
 def get_db():
     db = SessionLocal()
