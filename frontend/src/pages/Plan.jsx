@@ -49,7 +49,7 @@ function GenerateForm({ hasPlan, busy, onSubmit, onCancel }) {
   const field = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500'
 
   return (
-    <form onSubmit={submit} className="bg-white rounded-xl p-6 border border-slate-200 space-y-4">
+    <form onSubmit={submit} className="bg-surface rounded-xl p-6 border border-slate-200 space-y-4">
       <h2 className="font-bold text-lg">{hasPlan ? 'Regenerate your plan' : 'Make your 7-day plan'}</h2>
       <p className="text-sm text-slate-500">
         The plan is built from your real stats: weak topics first, a few mixed problems and a short revision.
@@ -132,7 +132,7 @@ function WeeklyReview({ proposal, busy, onConfirm, onDiscard }) {
     </div>
   )
   return (
-    <section aria-label="Weekly review" className="bg-white rounded-xl p-6 border border-blue-200 space-y-4">
+    <section aria-label="Weekly review" className="bg-surface rounded-xl p-6 border border-blue-200 space-y-4">
       <div>
         <h2 className="font-bold text-lg">📝 Weekly review</h2>
         <p className="text-sm text-slate-500">{shortDate(review.period.start)} – {shortDate(review.period.end)}</p>
@@ -301,7 +301,7 @@ export default function Plan() {
 
       {plan && (
         <>
-          <section className="bg-white rounded-xl p-6 border border-slate-200 space-y-4">
+          <section className="bg-surface rounded-xl p-6 border border-slate-200 space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm text-slate-700">{plan.summary}</p>
@@ -338,7 +338,7 @@ export default function Plan() {
               <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm">
                 <span>{missed} unfinished task{missed === 1 ? '' : 's'} from earlier days.</span>
                 <button type="button" onClick={moveMissed} disabled={busy === 'reschedule'}
-                        className="text-blue-700 underline disabled:opacity-50">Move them to today</button>
+                        className="text-blue-400 underline disabled:opacity-50">Move them to today</button>
               </div>
             )}
           </section>
@@ -351,12 +351,12 @@ export default function Plan() {
             <h2 className="font-bold text-lg">Focus topics</h2>
             <div className="grid md:grid-cols-3 gap-4">
               {plan.focus_topics.map((f) => (
-                <div key={f.topic} className="bg-white rounded-xl p-4 border border-slate-200 space-y-2">
+                <div key={f.topic} className="bg-surface rounded-xl p-4 border border-slate-200 space-y-2">
                   <div className="font-semibold">{topicLabel(f.topic)}</div>
                   <p className="text-sm text-slate-600">{f.reason}</p>
                   <div className="flex flex-wrap gap-1">
                     {f.patterns.map((p) => (
-                      <span key={p} className="px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-700 border border-blue-100">{p}</span>
+                      <span key={p} className="px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-400 border border-blue-100">{p}</span>
                     ))}
                   </div>
                 </div>
@@ -369,7 +369,7 @@ export default function Plan() {
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3">
               {plan.days.map((d) => (
                 <div key={d.date}
-                     className={`bg-white rounded-xl p-3 border space-y-3 ${d.is_today ? 'border-blue-500 ring-2 ring-blue-200' : 'border-slate-200'}`}>
+                     className={`bg-surface rounded-xl p-3 border space-y-3 ${d.is_today ? 'border-blue-500 ring-2 ring-blue-200' : 'border-slate-200'}`}>
                   <div className="flex items-center justify-between">
                     <div className="font-semibold text-sm">{d.weekday} <span className="text-slate-400 font-normal">{shortDate(d.date)}</span></div>
                     {d.is_today && <span className="text-[10px] uppercase tracking-wide bg-blue-600 text-white rounded-full px-2 py-0.5">Today</span>}

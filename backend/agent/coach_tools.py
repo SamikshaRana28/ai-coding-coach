@@ -413,7 +413,24 @@ TOOLS: Dict[str, Tool] = {
              "Hint button. Call it ONLY when the student asked for a hint or help on that problem. Never "
              "call it on your own.",
              GetHintArgs, t_get_hint),
-        # Parts 5-6 add more tools here: get_study_plan, ...
+        Tool("get_study_plan",
+             "The student's current 7-day study plan (days, tasks with ids, focus topics, progress).",
+             NoArgs, t_get_study_plan),
+        Tool("create_study_plan",
+             "Create a NEW 7-day study plan from the student's real data (same as the Generate plan button). "
+             "It replaces and archives the current plan, so call it only when the student asks for a plan or "
+             "agrees to a new / lighter one. Use focus_topic for 'a plan for graphs', minutes_per_day for time limits.",
+             CreatePlanArgs, t_create_study_plan),
+        Tool("get_daily_tasks",
+             "Today's tasks for the student (ids, titles, pending/done/skipped).",
+             NoArgs, t_get_daily_tasks),
+        Tool("complete_task",
+             "Mark one of the student's daily tasks as done. Only when the student says they finished it.",
+             CompleteTaskArgs, t_complete_task),
+        Tool("get_streak",
+             "The student's current and longest daily streak.",
+             NoArgs, t_get_streak),
+        # Part 7+ can add more tools here
     ]
 }
 

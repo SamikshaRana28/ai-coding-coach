@@ -60,7 +60,7 @@ export default function SimilarQuestions() {
       {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 text-sm">{error}</div>}
 
       {difficulty && (
-        <div className="bg-white rounded-xl p-4 border border-slate-200 flex items-center gap-3">
+        <div className="bg-surface rounded-xl p-4 border border-slate-200 flex items-center gap-3">
           <span className="text-sm font-medium">Predicted Difficulty for "{title}":</span>
           <span className={`px-3 py-1 rounded-full text-sm font-semibold ${diffColor(difficulty.predicted_difficulty)}`}>
             {difficulty.predicted_difficulty}
@@ -72,7 +72,7 @@ export default function SimilarQuestions() {
       {results && (
         <div className="grid md:grid-cols-3 gap-4">
           {results.map((q, i) => (
-            <div key={i} className="bg-white rounded-xl p-4 border border-slate-200 space-y-2">
+            <div key={i} className="bg-surface rounded-xl p-4 border border-slate-200 space-y-2">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold">{q.title}</h3>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${diffColor(q.difficulty)}`}>

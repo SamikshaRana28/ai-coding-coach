@@ -3,6 +3,7 @@ import { api, getScore, predictWeakTopic, getProblemStats } from '../api'
 import { useAuth } from '../auth/useAuth'
 import TodayCard from '../components/TodayCard'
 import FocusCard from '../components/FocusCard'
+import { CHART } from '../chartTheme'
 
 const defaultStats = {
   arrays_solved: 25, graphs_solved: 10, dp_solved: 8,
@@ -94,7 +95,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid md:grid-cols-3 gap-6">
-        <div className="md:col-span-1 bg-white rounded-xl p-6 border border-slate-200 space-y-3">
+        <div className="md:col-span-1 bg-surface rounded-xl p-6 border border-slate-200 space-y-3">
           <h2 className="font-bold">Your Stats</h2>
           {Object.entries(defaultStats).map(([key]) => (
             <div key={key}>
@@ -119,7 +120,7 @@ export default function Dashboard() {
 
         <div className="md:col-span-2 space-y-6">
           {score ? (
-            <div className="bg-white rounded-xl p-6 border border-slate-200 flex items-center gap-8">
+            <div className="bg-surface rounded-xl p-6 border border-slate-200 flex items-center gap-8">
               <ScoreGauge score={score.total_score} />
               <div>
                 <h2 className="text-2xl font-bold">{score.level}</h2>
@@ -179,12 +180,12 @@ function ScoreGauge({ score }) {
   const radius = 60
   const circumference = 2 * Math.PI * radius
   const offset = circumference - (score / 100) * circumference
-  const color = score >= 80 ? '#22c55e' : score >= 60 ? '#3b82f6' : score >= 40 ? '#f59e0b' : '#ef4444'
+  const color = score >= 80 ? CHART.success : score >= 60 ? CHART.primary : score >= 40 ? CHART.warning : CHART.danger
 
   return (
     <div className="relative w-36 h-36 shrink-0">
       <svg className="w-36 h-36 -rotate-90">
-        <circle cx="72" cy="72" r={radius} stroke="#e2e8f0" strokeWidth="12" fill="none" />
+        <circle cx="72" cy="72" r={radius} stroke={CHART.track} strokeWidth="12" fill="none" />
         <circle
           cx="72" cy="72" r={radius}
           stroke={color} strokeWidth="12" fill="none"
@@ -203,7 +204,7 @@ function ScoreGauge({ score }) {
 
 function StatCard({ label, value }) {
   return (
-    <div className="bg-white rounded-xl p-4 border border-slate-200">
+    <div className="bg-surface rounded-xl p-4 border border-slate-200">
       <div className="text-2xl font-bold">{value}</div>
       <div className="text-sm text-slate-500">{label}</div>
     </div>

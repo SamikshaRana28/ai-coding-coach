@@ -23,7 +23,7 @@
 //       </div>
 
 //       <div className="grid md:grid-cols-3 gap-6">
-//         <div className="bg-white rounded-xl p-6 border border-slate-200 space-y-3">
+//         <div className="bg-surface rounded-xl p-6 border border-slate-200 space-y-3">
 //           <h2 className="font-bold">Problems Solved</h2>
 //           {Object.entries(defaultStats).map(([key]) => (
 //             <div key={key}>
@@ -41,14 +41,14 @@
 //           </div>
 //         </div>
 
-//         <div className="md:col-span-2 bg-white rounded-xl p-6 border border-slate-200">
+//         <div className="md:col-span-2 bg-surface rounded-xl p-6 border border-slate-200">
 //           <ResponsiveContainer width="100%" height={400}>
 //             <RadarChart data={data}>
-//               <PolarGrid />
-//               <PolarAngleAxis dataKey="topic" />
-//               <PolarRadiusAxis />
-//               <Radar name="Problems Solved" dataKey="value" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.4} />
-//               <Legend />
+//               <PolarGrid stroke={CHART.grid} />
+//               <PolarAngleAxis dataKey="topic" tick={{ fill: CHART.axis, fontSize: 12 }} />
+//               <PolarRadiusAxis stroke={CHART.grid} tick={{ fill: CHART.axis, fontSize: 10 }} />
+//               <Radar name="Problems Solved" dataKey="value" stroke={CHART.primary} fill={CHART.primary} fillOpacity={0.4} />
+//               <Legend {...CHART.legend} />
 //             </RadarChart>
 //           </ResponsiveContainer>
 //         </div>
@@ -61,6 +61,7 @@
 
 import { useState, useEffect } from 'react'
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Legend } from 'recharts'
+import { CHART } from '../chartTheme'
 import { api } from '../api'
 import { useAuth } from '../auth/useAuth'
 
@@ -120,7 +121,7 @@ export default function TopicTracker({ userId: userIdProp }) {
       </div>
 
       <div className="grid md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-xl p-6 border border-slate-200 space-y-3">
+        <div className="bg-surface rounded-xl p-6 border border-slate-200 space-y-3">
           <h2 className="font-bold">Problems Solved (auto-tracked)</h2>
           {Object.entries(stats).map(([key, value]) => (
             <div key={key} className="flex justify-between items-center text-sm">
@@ -156,14 +157,14 @@ export default function TopicTracker({ userId: userIdProp }) {
           )}
         </div>
 
-        <div className="md:col-span-2 bg-white rounded-xl p-6 border border-slate-200">
+        <div className="md:col-span-2 bg-surface rounded-xl p-6 border border-slate-200">
           <ResponsiveContainer width="100%" height={400}>
             <RadarChart data={data}>
-              <PolarGrid />
-              <PolarAngleAxis dataKey="topic" />
-              <PolarRadiusAxis />
-              <Radar name="Problems Solved" dataKey="value" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.4} />
-              <Legend />
+              <PolarGrid stroke={CHART.grid} />
+              <PolarAngleAxis dataKey="topic" tick={{ fill: CHART.axis, fontSize: 12 }} />
+              <PolarRadiusAxis stroke={CHART.grid} tick={{ fill: CHART.axis, fontSize: 10 }} />
+              <Radar name="Problems Solved" dataKey="value" stroke={CHART.primary} fill={CHART.primary} fillOpacity={0.4} />
+              <Legend {...CHART.legend} />
             </RadarChart>
           </ResponsiveContainer>
         </div>

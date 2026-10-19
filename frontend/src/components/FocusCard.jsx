@@ -15,7 +15,7 @@ export default function FocusCard() {
     return () => { cancelled = true }
   }, [])
 
-  const card = 'bg-white rounded-xl p-6 border border-slate-200'
+  const card = 'bg-surface rounded-xl p-6 border border-slate-200'
   if (state.status === 'loading') return <div className={`${card} animate-pulse text-slate-400`}>Loading focus areas…</div>
   if (state.status === 'error') return <div className={`${card} text-red-600 text-sm`}>Could not load focus areas: {state.message}</div>
 
@@ -37,7 +37,7 @@ export default function FocusCard() {
           <div className="text-xs text-slate-500 mb-1">Patterns to study</div>
           <div className="flex flex-wrap gap-1">
             {patterns.map((p) => (
-              <span key={p} className="px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-700 border border-blue-100">{p}</span>
+              <span key={p} className="px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-400 border border-blue-100">{p}</span>
             ))}
           </div>
         </div>

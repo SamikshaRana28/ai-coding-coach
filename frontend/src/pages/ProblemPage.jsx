@@ -217,7 +217,7 @@ export default function ProblemPage() {
       <div className="grid lg:grid-cols-2 gap-6 items-start">
         {/* ── left: the question ─────────────────────────────────────────── */}
         <div className="space-y-6">
-          <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
+          <div className="bg-surface rounded-xl border border-slate-200 p-6 space-y-4">
             <div className="flex items-start justify-between gap-3">
               <h1 className="text-2xl font-bold">{problem.title}</h1>
               <span className="flex items-center gap-1.5 text-sm text-slate-600 shrink-0 pt-1">
@@ -246,13 +246,13 @@ export default function ProblemPage() {
             
             <button
               type="button"
-              onClick={openCoach}              className="text-sm text-blue-700 border border-blue-200 bg-blue-50 px-3 py-2 rounded-lg hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              onClick={openCoach}              className="text-sm text-blue-400 border border-blue-200 bg-blue-50 px-3 py-2 rounded-lg hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             >
               💬 Ask Coach about this problem
             </button>
           </div>
 
-          <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-3">
+          <div className="bg-surface rounded-xl border border-slate-200 p-6 space-y-3">
             <h2 className="font-bold">🔗 Similar questions</h2>
             {similar.state === 'loading' && <p className="text-sm text-slate-400 animate-pulse">Finding similar questions…</p>}
             {similar.state === 'error' && <p className="text-sm text-slate-400">Couldn&apos;t load similar questions.</p>}
@@ -288,10 +288,10 @@ export default function ProblemPage() {
 
         {/* ── right: editor + review ─────────────────────────────────────── */}
         <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+          <div className="bg-surface rounded-xl border border-slate-200 p-4 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <select
-                className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white"
+                className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-surface"
                 aria-label="Language"
                 value={language}
                 onChange={(e) => onLanguageChange(e.target.value)}
@@ -357,7 +357,7 @@ export default function ProblemPage() {
                 type="button"
                 onClick={() => setStuck((st) => ({ ...st, dismissed: true }))}
                 aria-label="Dismiss"
-                className="text-blue-700 hover:text-blue-900 leading-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+                className="text-blue-400 hover:text-blue-900 leading-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
               >
                 ✕
               </button>

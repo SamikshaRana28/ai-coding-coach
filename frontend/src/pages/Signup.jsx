@@ -51,7 +51,7 @@ export default function Signup() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-8">
-      <div className="w-full max-w-md bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
+      <div className="w-full max-w-md bg-surface rounded-xl border border-slate-200 p-8 shadow-sm">
         <h1 className="text-2xl font-bold">🤖 AI Coding Coach</h1>
         <p className="text-slate-500 mt-1 mb-6">Create your account</p>
 

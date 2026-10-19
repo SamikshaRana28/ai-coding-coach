@@ -1,23 +1,79 @@
-import { useEffect, useRef, useState } from 'react'
-import { startInterview, sendAnswer, getInterview, getScorecard, getInterviewTopics } from '../api'
+// Interview Practice (lives inside the Coach page, also reachable at /interview).
+// Flow: choose round (+ resume PDF) -> consent (if camera) -> live interview with voice/camera -> scorecard.
+// Backend: /interview/* (rounds, resume extract, metrics). Camera tracking runs in the browser; only aggregate numbers are sent.
+import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  startInterview, sendAnswer, getInterview, getScorecard, getInterviewTopics,
+  saveInterviewMetrics, deleteInterviewResume,
+} from '../api'
 import { useAuth } from '../auth/useAuth'
+import { friendlyError } from '../components/ui'
+import RoundSetup from '../interview/RoundSetup'
+import InterviewRoom from '../interview/InterviewRoom'
+import Scorecard from '../interview/Scorecard'
+import ConsentModal from '../interview/ConsentModal'
+import { useBodyLanguage, useIntegrityEvents } from '../interview/useBodyLanguage'
+import { speechSupport } from '../interview/useSpeech'
+
+const END_MESSAGE = 'Please end the interview now and give me my scorecard.'
 
 export default function Interview() {
   const { user } = useAuth()
-  const STORAGE_KEY = `interview_session_id_${user.id}` // har user ka apna session
+  const STORAGE_KEY = `interview_session_id_${user.id}`        // each user has their own session
   const [topics, setTopics] = useState(['arrays'])
-  const [topic, setTopic] = useState('arrays')
   const [sessionId, setSessionId] = useState(null)
+  const [round, setRound] = useState('dsa')
   const [messages, setMessages] = useState([])
-  const [status, setStatus] = useState('idle') // idle | active | finished | expired
+  const [status, setStatus] = useState('idle')                 // idle | active | finished | expired
   const [turns, setTurns] = useState({ used: 0, max: 12 })
-  const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [scorecard, setScorecard] = useState(null)
-  const bottomRef = useRef(null)
+  const [restored, setRestored] = useState(false)
+  const [voiceOut, setVoiceOut] = useState(false)
+  const [cameraOn, setCameraOn] = useState(false)
+  const [pendingStart, setPendingStart] = useState(null)       // setup params waiting for the consent screen
+  const [consentFor, setConsentFor] = useState(null)           // 'start' | 'toggle' | null
 
-  // Page reload ya server restart ke baad session DB se wapas aata hai
+  const videoRef = useRef(null)
+  const speechStatsRef = useRef(null)
+  const active = status === 'active'
+  const body = useBodyLanguage({ enabled: cameraOn && active, videoRef })
+  const getIntegrity = useIntegrityEvents(active)
+  const { getMetrics: getBodyMetrics } = body
+
+  // Everything we ever send about delivery: aggregate numbers, no media.
+  const buildMetrics = useCallback(() => {
+    const speech = speechStatsRef.current?.() || {}
+    const cam = getBodyMetrics()
+    return {
+      camera_used: cameraOn && cam.eye_contact_pct !== null,
+      voice_used: speech.words > 0,
+      duration_seconds: cam.duration_seconds,
+      eye_contact_pct: cam.eye_contact_pct,
+      look_away_count: cam.look_away_count,
+      head_stability_pct: cam.head_stability_pct,
+      posture_score: cam.posture_score,
+      hand_movement_level: cam.hand_movement_level,
+      multiple_faces_events: cam.multiple_faces_events,
+      filler_words_per_min: speech.filler_words_per_min ?? null,
+      speaking_pace_wpm: speech.speaking_pace_wpm ?? null,
+      ...getIntegrity(),
+    }
+  }, [cameraOn, getBodyMetrics, getIntegrity])
+
+  const pushMetrics = useCallback(async (id, snapshot) => {
+    try { await saveInterviewMetrics(id, snapshot || buildMetrics()) } catch { /* feedback is a bonus: never block the interview */ }
+  }, [buildMetrics])
+
+  // Save a snapshot every 30 s while active, so closing the tab does not lose the numbers.
+  useEffect(() => {
+    if (!active || !sessionId) return undefined
+    const t = setInterval(() => pushMetrics(sessionId), 30000)
+    return () => clearInterval(t)
+  }, [active, sessionId, pushMetrics])
+
+  // Reload / server restart: the session comes back from the DB.
   useEffect(() => {
     getInterviewTopics().then((r) => setTopics(r.data.topics)).catch(() => {})
     const saved = localStorage.getItem(STORAGE_KEY)
@@ -25,8 +81,10 @@ export default function Interview() {
     getInterview(saved)
       .then((r) => {
         setSessionId(r.data.session_id)
+        setRound(r.data.round || 'dsa')
         setMessages(r.data.history)
         setStatus(r.data.status)
+        setRestored(true)
         setTurns({ used: r.data.turns_used, max: r.data.max_turns })
         if (r.data.status === 'finished') {
           getScorecard(saved).then((sc) => setScorecard(sc.data)).catch(() => {})
@@ -35,160 +93,131 @@ export default function Interview() {
       .catch(() => localStorage.removeItem(STORAGE_KEY))
   }, [STORAGE_KEY])
 
-  const loadScorecard = (id) => getScorecard(id).then((r) => setScorecard(r.data)).catch(() => {})
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, loading])
-
-  const handleStart = async () => {
+  const doStart = async ({ round: r, topic, resumeText, voice }, withCamera) => {
     setLoading(true)
     setError(null)
     setScorecard(null)
     try {
-      const r = await startInterview({ user_id: user.id, topic })
-      localStorage.setItem(STORAGE_KEY, r.data.session_id)
-      setSessionId(r.data.session_id)
-      setMessages([{ role: 'assistant', content: r.data.reply }])
-      setStatus(r.data.status)
-      setTurns({ used: 0, max: r.data.max_turns })
+      const res = await startInterview({ topic, round: r, resume_text: resumeText })
+      localStorage.setItem(STORAGE_KEY, res.data.session_id)
+      setSessionId(res.data.session_id)
+      setRound(res.data.round || r)
+      setMessages([{ role: 'assistant', content: res.data.reply }])
+      setTurns({ used: 0, max: res.data.max_turns })
+      setRestored(false)
+      setVoiceOut(Boolean(voice) && speechSupport().tts)
+      setCameraOn(withCamera)
+      setStatus(res.data.status)
     } catch (e) {
-      setError(e.response?.data?.detail || e.message)
+      setError(friendlyError(e))
     } finally {
       setLoading(false)
+      setPendingStart(null)
     }
   }
 
-  const handleSend = async () => {
-    const text = input.trim()
-    if (!text || loading) return
-    setInput('')
+  const handleStart = (params) => {
+    if (params.camera) {
+      setPendingStart(params)
+      setConsentFor('start')
+    } else {
+      doStart(params, false)
+    }
+  }
+
+  const handleSend = async (text) => {
     setLoading(true)
     setError(null)
     setMessages((m) => [...m, { role: 'user', content: text }])
     try {
-      const r = await sendAnswer(sessionId, { answer: text })
-      setMessages((m) => [...m, { role: 'assistant', content: r.data.reply }])
-      setStatus(r.data.status)
-      setTurns({ used: r.data.turns_used, max: r.data.max_turns })
-      if (r.data.status === 'finished') loadScorecard(sessionId)
+      const res = await sendAnswer(sessionId, { answer: text })
+      const ended = res.data.status !== 'active'
+      // Take the delivery snapshot BEFORE the status change stops the camera.
+      const snapshot = ended ? buildMetrics() : null
+      setMessages((m) => [...m, { role: 'assistant', content: res.data.reply }])
+      setStatus(res.data.status)
+      setTurns({ used: res.data.turns_used, max: res.data.max_turns })
+      if (ended) {
+        await pushMetrics(sessionId, snapshot)
+        if (res.data.status === 'finished') {
+          getScorecard(sessionId).then((r) => setScorecard(r.data)).catch(() => {})
+        }
+      }
     } catch (e) {
-      setError(e.response?.data?.detail || e.message)
+      setError(friendlyError(e))
     } finally {
       setLoading(false)
     }
   }
 
   const handleNew = () => {
+    if (sessionId && active && !window.confirm('Leave this interview? It will stay unfinished.')) return
+    if (sessionId) deleteInterviewResume(sessionId).catch(() => {})
     localStorage.removeItem(STORAGE_KEY)
     setSessionId(null)
     setMessages([])
     setStatus('idle')
     setScorecard(null)
     setError(null)
+    setCameraOn(false)
+    setRestored(false)
   }
 
-  if (status === 'idle') {
-    return (
-      <div className="space-y-6 max-w-xl">
-        <div>
-          <h1 className="text-3xl font-bold">🎤 Mock Interview</h1>
-          <p className="text-slate-500 mt-1">An AI interviewer asks questions, follows up, gives hints and scores you.</p>
-        </div>
-        <div>
-          <label className="text-sm font-medium block mb-1">Preferred topic</label>
-          <select
-            className="w-full border border-slate-300 rounded-lg px-3 py-2"
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-          >
-            {topics.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
-        </div>
-        <button
-          onClick={handleStart}
-          disabled={loading}
-          className="bg-blue-600 text-white px-5 py-2 rounded-lg disabled:opacity-50"
-        >
-          {loading ? 'Starting…' : 'Start interview'}
-        </button>
-        {error && <p className="text-red-600 text-sm">{error}</p>}
-      </div>
-    )
+  const toggleCamera = () => {
+    if (cameraOn) setCameraOn(false)
+    else setConsentFor('toggle')
+  }
+
+  const onAllow = () => {
+    if (consentFor === 'start' && pendingStart) doStart(pendingStart, true)
+    else setCameraOn(true)
+    setConsentFor(null)
+  }
+  const onDecline = () => {
+    if (consentFor === 'start' && pendingStart) doStart(pendingStart, false)
+    setConsentFor(null)
   }
 
   return (
-    <div className="space-y-4 max-w-3xl">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">🎤 Mock Interview</h1>
-        <div className="text-sm text-slate-500">
-          Turn {turns.used}/{turns.max} · <span className="font-medium">{status}</span>
-          <button onClick={handleNew} className="ml-3 text-blue-600 underline">New interview</button>
-        </div>
-      </div>
-
-      <div className="bg-white border border-slate-200 rounded-xl p-4 h-[420px] overflow-y-auto space-y-3">
-        {messages.map((m, i) => (
-          <div key={i} className={m.role === 'user' ? 'text-right' : 'text-left'}>
-            <div
-              className={`inline-block max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm ${
-                m.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-800'
-              }`}
-            >
-              {m.content}
-            </div>
-          </div>
-        ))}
-        {loading && <p className="text-slate-400 text-sm">Interviewer is thinking…</p>}
-        <div ref={bottomRef} />
-      </div>
-
-      {error && <p className="text-red-600 text-sm">{error}</p>}
-
-      {status === 'active' ? (
-        <div className="flex gap-2">
-          <textarea
-            className="flex-1 border border-slate-300 rounded-lg px-3 py-2 font-mono text-sm"
-            rows={4}
-            placeholder="Explain your approach, or paste your Python code…"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-          />
-          <button
-            onClick={handleSend}
-            disabled={loading || !input.trim()}
-            className="bg-blue-600 text-white px-4 rounded-lg disabled:opacity-50"
-          >
-            Send
-          </button>
-        </div>
-      ) : (
-        <p className="text-slate-500 text-sm">
-          {status === 'expired' ? 'Turn limit reached, interview closed without a scorecard.' : 'Interview finished.'}
-        </p>
-      )}
-
-      {scorecard && (
-        <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
-          <h2 className="text-xl font-bold">Scorecard: {scorecard.total}/{scorecard.out_of}</h2>
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            {['approach', 'complexity', 'edge_cases', 'communication'].map((k) => (
-              <div key={k} className="bg-slate-50 rounded-lg p-3">
-                <div className="text-slate-500 capitalize">{k.replace('_', ' ')}</div>
-                <div className="text-lg font-semibold">{scorecard[k]}/5</div>
-              </div>
-            ))}
-          </div>
-          {scorecard.weak_patterns?.length > 0 && (
-            <p className="text-sm">
-              <span className="font-medium">Weak patterns:</span> {scorecard.weak_patterns.join(', ')}
+    <div className="space-y-5">
+      {status === 'idle' ? (
+        <>
+          <div>
+            <h1 className="text-2xl font-bold">🎤 Interview Practice</h1>
+            <p className="text-slate-500 mt-1">
+              An AI interviewer asks questions, follows up, never hands you the answer, and scores you. Optional voice and camera give delivery feedback.
             </p>
-          )}
-          {scorecard.summary && <p className="text-sm text-slate-600">{scorecard.summary}</p>}
-        </div>
+          </div>
+          <RoundSetup topics={topics} onStart={handleStart} loading={loading} error={error} />
+        </>
+      ) : (
+        <>
+          <div className="flex justify-end">
+            <button type="button" onClick={handleNew} className="text-sm text-blue-400 underline">New interview</button>
+          </div>
+          <InterviewRoom
+            round={round}
+            messages={messages}
+            status={status}
+            turns={turns}
+            loading={loading}
+            error={error}
+            restored={restored}
+            onSend={handleSend}
+            onEnd={() => handleSend(END_MESSAGE)}
+            voiceOut={voiceOut}
+            onToggleVoice={() => setVoiceOut((v) => !v)}
+            cameraOn={cameraOn}
+            camera={body}
+            onToggleCamera={toggleCamera}
+            videoRef={videoRef}
+            speechStatsRef={speechStatsRef}
+          />
+          {scorecard && <Scorecard card={scorecard} />}
+          {status === 'finished' && !scorecard && <p className="text-sm text-slate-500 animate-pulse">Preparing your scorecard…</p>}
+        </>
       )}
+      {consentFor && <ConsentModal onAllow={onAllow} onDecline={onDecline} />}
     </div>
   )
 }

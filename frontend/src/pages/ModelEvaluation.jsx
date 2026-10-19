@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getModelEvaluation, getDatasetStats } from '../api'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { CHART } from '../chartTheme'
 
 function ConfusionMatrix({ matrix, labels, title }) {
   const max = Math.max(...matrix.flat())
@@ -18,7 +19,7 @@ function ConfusionMatrix({ matrix, labels, title }) {
             {row.map((val, j) => (
               <div
                 key={`${i}-${j}`}
-                className="text-xs text-center p-2 border border-white"
+                className="text-xs text-center p-2 border border-surface"
                 style={{
                   backgroundColor: i === j
                     ? `rgba(34,197,94,${val / max})`
@@ -37,7 +38,7 @@ function ConfusionMatrix({ matrix, labels, title }) {
 
 function MetricsCard({ name, metrics, highlight }) {
   return (
-    <div className={`rounded-xl p-4 border ${highlight ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white'}`}>
+    <div className={`rounded-xl p-4 border ${highlight ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-surface'}`}>
       <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
         {name} {highlight && <span className="text-sm bg-blue-500 text-white px-2 py-0.5 rounded-full">Winner 🏆</span>}
       </h3>
@@ -103,16 +104,16 @@ export default function ModelEvaluation() {
         <MetricsCard name="Random Forest" metrics={data.random_forest} highlight={data.winner === 'Random Forest'} />
       </div>
 
-      <div className="bg-white rounded-xl p-6 border border-slate-200">
+      <div className="bg-surface rounded-xl p-6 border border-slate-200">
         <h2 className="font-bold text-xl mb-4">Per-Class F1 Score Comparison</h2>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={f1ChartData}>
-            <XAxis dataKey="topic" />
-            <YAxis domain={[0, 1]} />
-            <Tooltip />
-            <Legend />
-            <Bar dataKey="XGBoost" fill="#3b82f6" />
-            <Bar dataKey="Random Forest" fill="#f59e0b" />
+            <XAxis dataKey="topic" {...CHART.axisProps} />
+            <YAxis domain={[0, 1]} {...CHART.axisProps} />
+            <Tooltip {...CHART.tooltip} />
+            <Legend {...CHART.legend} />
+            <Bar dataKey="XGBoost" fill={CHART.primary} />
+            <Bar dataKey="Random Forest" fill={CHART.warning} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -123,7 +124,7 @@ export default function ModelEvaluation() {
 </p>
 
 
-      <div className="bg-white rounded-xl p-6 border border-slate-200 grid md:grid-cols-2 gap-8">
+      <div className="bg-surface rounded-xl p-6 border border-slate-200 grid md:grid-cols-2 gap-8">
         <ConfusionMatrix matrix={data.xgboost.confusion_matrix} labels={data.class_labels} title="XGBoost Confusion Matrix" />
         <ConfusionMatrix matrix={data.random_forest.confusion_matrix} labels={data.class_labels} title="Random Forest Confusion Matrix" />
       </div>
@@ -136,7 +137,7 @@ export default function ModelEvaluation() {
 
 
 
-      <div className="bg-white rounded-xl p-6 border border-slate-200">
+      <div className="bg-surface rounded-xl p-6 border border-slate-200">
         <h2 className="font-bold text-xl mb-4">Feature Importance ({data.winner})</h2>
         <div className="space-y-2">
           {Object.entries(data[winnerKey].feature_importance)

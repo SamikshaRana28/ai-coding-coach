@@ -98,6 +98,13 @@ export const getSettings = () => api.get('/settings')
 export const updateSettings = (data) => api.put('/settings', data)
 // Interview agent
 export const getInterviewTopics = () => api.get('/interview/topics')
+export const extractResume = (file) => {            // PDF -> text (nothing is stored on the server)
+  const form = new FormData()
+  form.append('file', file)
+  return api.post('/interview/resume/extract', form)
+}
+export const saveInterviewMetrics = (id, data) => api.post(`/interview/${id}/metrics`, data)   // aggregate numbers only
+export const deleteInterviewResume = (id) => api.delete(`/interview/${id}/resume`)
 export const startInterview = (data) => api.post('/interview/start', data)
 export const sendAnswer = (id, data) => api.post(`/interview/${id}/answer`, data)
 export const getInterview = (id) => api.get(`/interview/${id}`)

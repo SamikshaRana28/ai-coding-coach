@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { getProgress } from '../api'
 import { useAuth } from '../auth/useAuth'
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts'
+import { CHART } from '../chartTheme'
 
 export default function Progress() {
   const { user } = useAuth()
@@ -24,14 +25,14 @@ export default function Progress() {
         <h1 className="text-3xl font-bold">📅 Progress Over Time</h1>
         <p className="text-slate-500 mt-1">Weekly readiness score trend ({data.weeks} weeks)</p>
       </div>
-      <div className="bg-white rounded-xl p-6 border border-slate-200">
+      <div className="bg-surface rounded-xl p-6 border border-slate-200">
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={data.progress}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="week" />
-            <YAxis domain={[0, 100]} />
-            <Tooltip />
-            <Line type="monotone" dataKey="score" stroke="#3b82f6" strokeWidth={2} />
+            <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+            <XAxis dataKey="week" {...CHART.axisProps} />
+            <YAxis domain={[0, 100]} {...CHART.axisProps} />
+            <Tooltip {...CHART.tooltip} />
+            <Line type="monotone" dataKey="score" stroke={CHART.primary} strokeWidth={2} />
           </LineChart>
         </ResponsiveContainer>
       </div>

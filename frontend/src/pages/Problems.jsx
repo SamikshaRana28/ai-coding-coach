@@ -110,7 +110,7 @@ export default function Problems() {
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1
   const to = Math.min(page * pageSize, total)
 
-  const selectClass = 'border border-slate-300 rounded-lg px-3 py-2 bg-white text-sm'
+  const selectClass = 'border border-slate-300 rounded-lg px-3 py-2 bg-surface text-sm'
 
   return (
     <div className="space-y-6">
@@ -175,7 +175,7 @@ export default function Problems() {
         </div>
       )}
 
-      <div className={`bg-white rounded-xl border border-slate-200 overflow-hidden transition-opacity ${loading && data ? 'opacity-60' : ''}`}>
+      <div className={`bg-surface rounded-xl border border-slate-200 overflow-hidden transition-opacity ${loading && data ? 'opacity-60' : ''}`}>
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-slate-500 text-left">
             <tr>
@@ -243,7 +243,7 @@ export default function Problems() {
           <button
             onClick={() => update({ page: page - 1 }, { keepPage: true })}
             disabled={page <= 1}
-            className="px-3 py-1 rounded border border-slate-300 bg-white disabled:opacity-40"
+            className="px-3 py-1 rounded border border-slate-300 bg-surface disabled:opacity-40"
           >
             Prev
           </button>
@@ -256,7 +256,7 @@ export default function Problems() {
                 onClick={() => update({ page: p }, { keepPage: true })}
                 aria-current={p === page ? 'page' : undefined}
                 className={`px-3 py-1 rounded border ${
-                  p === page ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-slate-300 hover:bg-slate-50'
+                  p === page ? 'bg-blue-600 text-white border-blue-600' : 'bg-surface border-slate-300 hover:bg-slate-50'
                 }`}
               >
                 {p}
@@ -266,7 +266,7 @@ export default function Problems() {
           <button
             onClick={() => update({ page: page + 1 }, { keepPage: true })}
             disabled={page >= totalPages}
-            className="px-3 py-1 rounded border border-slate-300 bg-white disabled:opacity-40"
+            className="px-3 py-1 rounded border border-slate-300 bg-surface disabled:opacity-40"
           >
             Next
           </button>
@@ -275,7 +275,7 @@ export default function Problems() {
         <label className="flex items-center gap-2">
           Per page
           <select
-            className="border border-slate-300 rounded px-2 py-1 bg-white"
+            className="border border-slate-300 rounded px-2 py-1 bg-surface"
             value={pageSize}
             onChange={(e) => update({ page_size: e.target.value === String(DEFAULT_PAGE_SIZE) ? '' : e.target.value })}
           >

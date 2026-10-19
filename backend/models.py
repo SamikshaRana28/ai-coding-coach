@@ -133,6 +133,12 @@ class InterviewSession(Base):
     hints_used = Column(Integer, default=0)
     scorecard = Column(Text, nullable=True)        # JSON string
     created_at = Column(DateTime, default=datetime.utcnow)
+    # Part 9 (interview mode): round = dsa | behavioral | sql | resume | mixed.
+    # resume_text is wiped when the interview ends (or via DELETE /interview/{id}/resume).
+    # delivery_metrics = JSON with AGGREGATE numbers only (eye contact %, pace...). No video/images, ever.
+    round = Column(String, default="dsa", server_default="dsa")
+    resume_text = Column(Text, nullable=True)
+    delivery_metrics = Column(Text, nullable=True)
 
 
 class InterviewTurn(Base):
@@ -271,6 +277,9 @@ class Notification(Base):
 # `alembic upgrade head` yet would crash on every login. Idempotent and additive only.
 _ADDED_COLUMNS = [
     ("users", "notify_email", "BOOLEAN NOT NULL DEFAULT false"),
+    ("interview_sessions", "round", "VARCHAR DEFAULT 'dsa'"),
+    ("interview_sessions", "resume_text", "TEXT"),
+    ("interview_sessions", "delivery_metrics", "TEXT"),
 ]
 
 

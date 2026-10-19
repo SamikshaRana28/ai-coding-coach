@@ -52,7 +52,7 @@ export default function TodayCard() {
     }
   }
 
-  const card = 'bg-white rounded-xl p-6 border border-slate-200'
+  const card = 'bg-surface rounded-xl p-6 border border-slate-200'
   if (data.status === 'loading') return <div className={`${card} animate-pulse text-slate-400`}>Loading today…</div>
   if (data.status === 'error') return <div className={`${card} text-red-600 text-sm`}>Could not load today&apos;s tasks: {data.message}</div>
 

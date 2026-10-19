@@ -37,7 +37,7 @@ export default function Settings() {
       {error && <div role="alert" className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">{error}</div>}
       {!settings && !error && <p className="text-slate-400 animate-pulse">Loading…</p>}
       {settings && (
-        <section className="bg-white rounded-xl p-6 border border-slate-200 space-y-3">
+        <section className="bg-surface rounded-xl p-6 border border-slate-200 space-y-3">
           <h2 className="font-bold">Reminders</h2>
           <p className="text-sm text-slate-500">
             The Coach always shows reminders inside the app. You can also get a short email in the morning and a

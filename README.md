@@ -577,3 +577,31 @@ Tests use in-memory SQLite and a fake LLM. They cover scoring and prediction, pr
 ## Built by
 
 Samiksha Rana - [@SamikshaRana28](https://github.com/SamikshaRana28)
+---
+
+## Part 7: Dark UI, Coach page, floating Coach widget
+
+- **Theme**: dark by default. All colors live in `frontend/tailwind.config.js` (tokens `canvas`, `surface`, `elevated`, `line`, `accent`, plus dark-adapted `slate/blue/red/green/amber` scales), so existing pages restyle without touching each component. Recharts colors come from `src/chartTheme.js`. Monaco uses `vs-dark`.
+- **Navbar**: Dashboard, Problems, Coach, Plan, Code Analyzer, Similar Questions, Topic Tracker, Progress, Model Evaluation. Streak flame and a user menu (Settings, Log out) on the right. Hamburger drawer on mobile. "Mock Interview" was removed from the navbar; it now lives in **Coach > Interview Practice**.
+- **Routes**: `/` now redirects to `/dashboard`; Model Evaluation moved to `/model-evaluation`; `/interview` redirects to `/coach?tab=interview`.
+- **Coach page** (`/coach`): tabs Chat, Today & Plan, Interview Practice.
+- **Floating Coach widget**: round button on every page (unread dot + streak badge), 380x560 panel, full screen on mobile. It stays mounted, so the chat survives page changes. Markdown + code blocks, "tools used" chips, suggestion chips, typing indicator, clear chat. One component (`components/CoachChat.jsx`) is used by both the widget and the Coach page.
+- Loading skeletons / empty states / "Backend not reachable" messages: `components/ui.jsx`.
+
+## Part 8 (the optional "Interview Mode" part): rounds, resume, voice, camera feedback
+
+New backend (additive; migration `0006_interview_rounds`, no new env vars):
+
+| Endpoint | What it does |
+|----------|--------------|
+| `POST /interview/start` | now accepts `round` (`dsa`, `behavioral`, `sql`, `resume`, `mixed`) and optional `resume_text` |
+| `POST /interview/resume/extract` | PDF (max 3 MB) -> plain text. Nothing is stored; the browser sends the text to `/interview/start` |
+| `DELETE /interview/{id}/resume` | delete the resume text now (it is also wiped automatically when the interview ends) |
+| `POST /interview/{id}/metrics` | aggregate delivery numbers from the browser (validated; unknown keys dropped) |
+| `GET /interview/{id}/scorecard` | now also returns `round` and a `delivery` section (numbers + tips + objective session events) |
+
+- Each round gets its own prompt and its own tools (`pick_round_question`, `read_resume`, existing DSA tools). Resume text is treated as untrusted data.
+- New dependency: `pypdf` (resume text extraction). Frontend: `@mediapipe/tasks-vision` (run `npm install`).
+- **Privacy**: MediaPipe (Face, Pose, Hands) runs in the browser. No video, image or landmark is uploaded or stored; only aggregates (eye-contact %, look-away count, head steadiness, posture, hand movement, filler words/min, pace, tab switches, focus lost, extra-face events). A consent screen appears before the camera starts, and the camera is optional. Wording is "eye contact and delivery feedback", never a cheating accusation.
+- Voice uses the browser's Web Speech API (Chrome/Edge) and `speechSynthesis`. The MediaPipe model files download from Google/jsDelivr CDNs on first use (self-host them in `public/` if you prefer).
+- Tests: `backend/tests/test_interview_rounds.py`.
