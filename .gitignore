@@ -17,3 +17,4 @@ build/backend/test.db
 .vercel
 .env*
 !.env.example
+project.zip
