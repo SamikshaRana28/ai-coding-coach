@@ -165,7 +165,7 @@ def chat(
         )
 
     context = _problem_context(db, user_id, body.problem_id, body.code) if body.problem_id else None
-     me = db.get(User, user_id)
+    me = db.get(User, user_id)
     checkin_line = followups.checkin_context(db, me) if me is not None else None     # Part 6: today's check-in
     if checkin_line:
         context = f"{context}\n{checkin_line}" if context else checkin_line

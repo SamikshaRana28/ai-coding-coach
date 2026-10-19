@@ -2,7 +2,6 @@ import os
 import sys
 import types
 from pathlib import Path
-
 import pytest
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -105,7 +104,14 @@ def _register(client, email, name="Test User", password="correct-horse-1"):
     body = resp.json()
     return body["user"], auth_header(body["access_token"])
 
+@pytest.fixture(autouse=True)
+def _clean_email_env(monkeypatch):
+    """Real .env ke email keys tests mein leak na hon. Jo test provider chahta hai, wo khud setenv karega."""
+    for var in ("RESEND_API_KEY", "SMTP_HOST", "SMTP_PORT", "SMTP_USER",
+                "SMTP_PASSWORD", "EMAIL_FROM"):
+        monkeypatch.delenv(var, raising=False)
 
+        
 @pytest.fixture()
 def main_module():
     """The module that owns the Groq `client` (analysis.py; /analyze calls it through run_analysis)."""
